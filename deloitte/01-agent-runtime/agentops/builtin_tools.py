@@ -18,21 +18,28 @@ def _catalogue() -> dict:
     return json.loads((DATA / "services.json").read_text())["services"]
 
 
-def get_service_status(service: str) -> dict:
-    svc = _catalogue().get(service)
+def _lookup(service: str) -> tuple[str, dict]:
+    # Models capitalise, add spaces or quotes ("LLM-Gateway", "payments api").
+    # Normalising here is cheaper than a failed call plus a wasted model step.
+    key = re.sub(r"[\s_]+", "-", service.strip().strip("'\"").lower())
+    svc = _catalogue().get(key)
     if svc is None:
         raise ToolError("not_found", f"no service named '{service}'. Known: {', '.join(_catalogue())}")
+    return key, svc
+
+
+def get_service_status(service: str) -> dict:
+    _, svc = _lookup(service)
     return {k: svc[k] for k in ("owner", "tier", "status", "p95_latency_ms", "open_incident", "last_deploy")}
 
 
 def get_error_budget(service: str) -> dict:
-    svc = _catalogue().get(service)
-    if svc is None:
-        raise ToolError("not_found", f"no service named '{service}'")
+    _, svc = _lookup(service)
     remaining = svc["error_budget_remaining"]
     return {
         "slo_availability": svc["slo_availability"],
         "error_budget_remaining": remaining,
+        "error_budget_remaining_pct": f"{remaining:.0%}",
         "release_gate": "open" if remaining > 0.1 else ("restricted" if remaining > 0 else "frozen"),
     }
 

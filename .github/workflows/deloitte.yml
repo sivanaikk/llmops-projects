@@ -94,29 +94,25 @@ jobs:
         run: |
           curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz | tar xz -C /usr/local/bin gitleaks
           gitleaks dir . --redact --exit-code 1
+      # Scanners run from pinned container images rather than third-party
+      # actions: fewer moving parts in the supply chain, same versions locally.
       - name: Vulnerabilities (Trivy, fail on fixable CRITICAL)
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          scan-type: fs
-          scan-ref: deloitte
-          severity: CRITICAL
-          ignore-unfixed: true
-          exit-code: "1"
+        run: >-
+          docker run --rm -v "$PWD:/src" -w /src aquasec/trivy:0.56.2
+          fs --scanners vuln --severity CRITICAL --ignore-unfixed --exit-code 1 --no-progress .
       - name: IaC misconfiguration (Trivy config, report only)
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          scan-type: config
-          scan-ref: deloitte
-          severity: HIGH,CRITICAL
-          exit-code: "0"
-      - name: SBOM (SPDX)
-        uses: anchore/sbom-action@v0
-        with: {path: deloitte, format: spdx-json, artifact-name: deloitte-sbom.spdx.json}
-      - name: SonarQube scan (runs when SONAR_TOKEN is configured)
+        run: >-
+          docker run --rm -v "$PWD:/src" -w /src aquasec/trivy:0.56.2
+          config --severity HIGH,CRITICAL --exit-code 0 .
+      - name: SBOM (Syft, SPDX)
+        run: docker run --rm -v "$PWD:/src" anchore/syft:v1.14.0 dir:/src -o spdx-json > sbom.spdx.json
+      - uses: actions/upload-artifact@v4
+        with: {name: deloitte-sbom, path: deloitte/sbom.spdx.json}
+      - name: SonarQube scan + quality gate (runs when SONAR_TOKEN is configured)
         if: env.SONAR_TOKEN != ''
-        uses: SonarSource/sonarqube-scan-action@v4
-        with: {projectBaseDir: deloitte}
-        env: {SONAR_HOST_URL: "${{ vars.SONAR_HOST_URL }}"}
+        run: >-
+          docker run --rm -v "$PWD:/usr/src" -e SONAR_TOKEN -e SONAR_HOST_URL="${{ vars.SONAR_HOST_URL || 'https://sonarcloud.io' }}"
+          sonarsource/sonar-scanner-cli:11.1
 
   agent-evals:
     # Real model, real agent: qwen2.5:1.5b on the CPU runner, via Ollama.

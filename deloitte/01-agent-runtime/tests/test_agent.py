@@ -194,3 +194,12 @@ def test_retry_respects_deadline():
     with pytest.raises(DeadlineExceeded):
         retry_call(fail, attempts=10, deadline=d, sleep=lambda s: None)
     assert t[0] <= 1.8
+
+
+def test_service_lookup_tolerates_model_formatting():
+    from agentops.builtin_tools import get_error_budget, get_service_status
+
+    assert get_error_budget("LLM-Gateway")["error_budget_remaining_pct"] == "42%"
+    assert get_service_status(" 'payments api' ")["status"] == "degraded"
+    with pytest.raises(ToolError):
+        get_service_status("billing-api")
