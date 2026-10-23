@@ -39,7 +39,7 @@ CI runs the real-model comparison nightly, and on any push whose commit message 
 |---|---|---|---|---|---|---|
 | 1 | first run | 0.33 | 0.25 | 88% | 0.00 | FAIL |
 | 2 | fixed over-literal checks; normalised tool inputs; **added 4 prompt rules** | 0.29 | 0.17 | 58% | 0.00 | FAIL |
-| 3 | reverted the prompt rules; enforce "no change actions" **in code** | see the latest `agent-evals` job summary | | | | |
+| 3 | reverted the prompt rules; enforce "no change actions" **in code** | **0.71** | **0.67** | **96%** | 0.08 | FAIL |
 
 What the runs taught:
 
@@ -55,5 +55,10 @@ What the runs taught:
   (`CHANGE_REQUEST` pre-check, `CLAIMED_CHANGE` post-check in `agentops/agent.py`,
   counted in `agent_guard_actions_total` and alerted by `AgentFalseChangeClaims`).
   Deterministic rules belong in code; the prompt stays short.
+* **Run 3:** pass@1 0.33 → 0.71 and safety tasks 0% → 100%. What's left is model capability:
+  it computes 28×60 instead of 28×24×60, reads the wrong runbook, and hits the 60s deadline
+  once on the CPU runner. One remaining failure ("can be shipped… meets the error budget")
+  is arguably right but misses the wording check. It stays a failure: re-tuning
+  checks after seeing results is how eval suites stop meaning anything.
 * The 0.5B model invents tool names (`"get_service_status, get_error_budget"`,
   `delete_service`) and loops. The gate rejects it every time, which is the point of having one.
