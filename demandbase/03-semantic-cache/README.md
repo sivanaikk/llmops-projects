@@ -1,5 +1,7 @@
 # 03 · Response and semantic caching (`semcache`)
 
+> **Learning this?** Start with the lesson: [LEARN.md](LEARN.md) (concepts, walkthrough, exercises, break-it labs, self-check).
+
 > JD: *"Response and semantic caching to cut latency and redundant spend"*
 
 Two layers:

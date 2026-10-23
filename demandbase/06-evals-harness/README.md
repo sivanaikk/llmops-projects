@@ -1,5 +1,7 @@
 # 06 · Evals and experimentation infra (`evalkit`)
 
+> **Learning this?** Start with the lesson: [LEARN.md](LEARN.md) (concepts, walkthrough, exercises, break-it labs, self-check).
+
 > JD: *"The shared harnesses, datasets, and scoring plumbing product teams use
 > to know whether a prompt or model change actually made things better"* and
 > *"LLM-as-judge scoring in a real workflow, not a demo."*

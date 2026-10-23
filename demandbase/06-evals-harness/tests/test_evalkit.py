@@ -25,6 +25,7 @@ def test_fact_recall_and_abstention():
     unans = ex(must_include=["don't know"], source=None)
     assert FactRecall()(unans, Output("I don’t know based on the account notes.", [], [])) == 1.0
     assert Abstention()(unans, Output("The CFO is Bob.", [], [])) == 0.0
+    assert FactRecall()(unans, Output("The CFO is Bob.", [], [])) == 0.0, "a made-up answer must not score"
     assert Abstention()(ex(), Output("I don't know based on the account notes.", [], [])) == 0.0
 
 

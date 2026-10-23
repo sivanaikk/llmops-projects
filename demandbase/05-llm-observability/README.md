@@ -1,5 +1,7 @@
 # 05 · LLM observability (`llmobs`)
 
+> **Learning this?** Start with the lesson: [LEARN.md](LEARN.md) (concepts, walkthrough, exercises, break-it labs, self-check).
+
 > JD: *"Traces, spans, prompt/response capture, ingest and billing visibility
 > for every AI feature"* and *"you've instrumented systems, chased
 > cardinality and cost in a metrics/logging backend, and built alerts that

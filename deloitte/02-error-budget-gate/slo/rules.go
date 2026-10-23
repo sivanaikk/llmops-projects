@@ -2,6 +2,8 @@ package slo
 
 import (
 	"fmt"
+	"math"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -23,6 +25,11 @@ type group struct {
 	Name     string `yaml:"name"`
 	Interval string `yaml:"interval,omitempty"`
 	Rules    []rule `yaml:"rules"`
+}
+
+// num prints a float without binary noise (1-0.99 is 0.010000000000000009 in float64).
+func num(v float64) string {
+	return strconv.FormatFloat(math.Round(v*1e9)/1e9, 'g', -1, 64)
 }
 
 // RatioRecord is the recording-rule name for the error ratio over a window.
@@ -48,15 +55,17 @@ func (s *Spec) Groups() []group {
 		rec.Rules = append(rec.Rules, rule{Record: RatioRecord(w), Expr: s.ratioExpr(w), Labels: s.labels()})
 	}
 	rec.Rules = append(rec.Rules,
-		rule{Record: "slo:objective", Expr: fmt.Sprintf("vector(%g)", s.Objective), Labels: s.labels()},
+		rule{Record: "slo:objective", Expr: fmt.Sprintf("vector(%s)", num(s.Objective)), Labels: s.labels()},
 		rule{
 			Record: "slo:error_budget_remaining",
-			Expr:   fmt.Sprintf("1 - (%s%s / %g)", RatioRecord(s.Window), s.selector(), s.ErrorBudget()),
+			Expr:   fmt.Sprintf("1 - (%s%s / %s)", RatioRecord(s.Window), s.selector(), num(s.ErrorBudget())),
 			Labels: s.labels(),
 		},
 	)
 
-	burn := func(w string) string { return fmt.Sprintf("%s%s / %g", RatioRecord(w), s.selector(), s.ErrorBudget()) }
+	burn := func(w string) string {
+		return fmt.Sprintf("%s%s / %s", RatioRecord(w), s.selector(), num(s.ErrorBudget()))
+	}
 	ann := func(summary, runbook string) map[string]string {
 		return map[string]string{"summary": summary, "runbook_url": runbook,
 			"description": fmt.Sprintf("SLO %s/%s (%.4g%% over %s), owner %s", s.Service, s.Name, s.Objective*100, s.Window, s.Owner)}

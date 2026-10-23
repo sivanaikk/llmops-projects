@@ -10,6 +10,16 @@ Everything runs on **small local models** (`qwen2.5:1.5b`, `qwen2.5:0.5b` via
 Ollama, CPU only). The [Demandbase lab](../demandbase/) next door already covers
 the LLM gateway and guardrails; this lab builds on top of that, around an agent.
 
+## Learn it
+
+This lab is **Track B: Applied AI SRE** of the [learning path](../LEARNING_PATH.md). Each project folder
+has a `LEARN.md` lesson; the [exercises](exercises/README.md) are auto-checked:
+
+```bash
+make check EX=01        # implement exercises/starter/ex01_*.py until it passes
+make break-it           # list the bug catalogue; make break-it ID=<id> to inject one
+```
+
 ## JD → project map
 
 | JD | Project | Tools |
@@ -46,7 +56,7 @@ flowchart LR
 
 ```bash
 cd deloitte
-make install && make test      # 56 Python tests + 10 Go tests, no model needed
+make install && make test      # 57 Python tests + 10 Go tests, no model needed
 make sentinel-demo             # drift/cost detectors on 5 synthetic scenarios
 
 make up                        # agent, Ollama (small models), Toxiproxy, Prometheus, Grafana, Jaeger, MLflow
@@ -69,7 +79,7 @@ make gate                      # error-budget decision for agent-runtime
 
 | Check | Result |
 |---|---|
-| Python tests: agent runtime (incl. HTTP service, real-client error classification, safety guards), sentinel, evals (incl. MLflow tracker), resilience, repo consistency | 56 passed |
+| Python tests: agent runtime (incl. HTTP service, real-client error classification, safety guards), sentinel, evals (incl. MLflow tracker), resilience, repo consistency, demo | 57 passed |
 | Go: `go vet`, `gofmt`, `go test` (gate policy, rules, fake Prometheus server) | 10 passed |
 | Generated SLO rules + agent alerts: `promtool check` and `promtool test` (6 scenarios, incl. "budget stops ticket but don't burn the SLO") | pass |
 | Helm: `helm lint` + kubeconform; Argo CD manifests against the Argo CD CRD schemas | valid |
@@ -77,6 +87,7 @@ make gate                      # error-budget decision for agent-runtime
 | k6: `k6 inspect` for each scenario selection | parses |
 | gitleaks over the repo | no leaks |
 | ruff | clean |
+| Learning material: every exercise solution passes (30 Python checks + Go); every break-it bug is caught (18/18); no broken lesson links | pass (CI: `learning-material` workflow) |
 
 | **Real-model agent evals in GitHub Actions** (qwen2.5:1.5b vs 0.5b via Ollama on the runner) | runs on every `[run-evals]` push; history and lessons in [04-agent-evals](04-agent-evals/README.md#eval-history-real-runs-in-ci-qwen25-on-a-2-vcpu-github-runner-12-tasks--2-trials) |
 | Full CI workflow (python, go, validate, security: gitleaks + Trivy + SBOM) | green |

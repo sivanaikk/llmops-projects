@@ -3,7 +3,7 @@ SHELL := /bin/bash
 PY ?= python3
 export PYTHONPATH := 02-guardrails:03-semantic-cache:04-cost-control:05-llm-observability:06-evals-harness:07-account-rag-app
 
-.PHONY: help install test e2e lint up down bootstrap smoke evals eval-compare showback cache-bench gitops-rules validate gameday load
+.PHONY: help install test e2e lint up down bootstrap smoke evals eval-compare showback cache-bench gitops-rules validate gameday load exercises check solutions break-it
 
 help:          ## list targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -64,3 +64,16 @@ gameday:       ## SCENARIO=primary-outage|secondary-outage|slow-provider|redis-o
 
 load:          ## RPS=5 DURATION=60 load test against the gateway
 	set -a; source .env; set +a; $(PY) 09-sre/tools/loadgen.py --rps $(or $(RPS),2) --duration $(or $(DURATION),30)
+
+# ---------------- learning ----------------
+exercises:     ## run all exercises against YOUR code in exercises/starter/
+	cd exercises && $(PY) -m pytest -p no:cacheprovider -q tests || true
+
+check:         ## EX=03 check one exercise (your code)
+	cd exercises && $(PY) -m pytest -p no:cacheprovider -q tests/test_ex$(EX)_*.py
+
+solutions:     ## run the exercise tests against the reference solutions
+	cd exercises && EXERCISE_IMPL=solutions $(PY) -m pytest -p no:cacheprovider -q tests
+
+break-it:      ## ID=<mutation> inject a bug and see what catches it (no ID: list them)
+	cd .. && $(PY) tools/break_it.py $(notdir $(CURDIR)) $(if $(ID),--run $(ID),--list)

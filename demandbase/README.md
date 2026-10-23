@@ -9,6 +9,16 @@ it with real SRE ownership.
 This folder builds a small but complete version of that runtime, on the JD's
 stack, with **small local models** so it runs on a laptop.
 
+## Learn it
+
+This lab is **Track A: LLM platform engineering** of the [learning path](../LEARNING_PATH.md). Each project folder
+has a `LEARN.md` lesson; the [exercises](exercises/README.md) are auto-checked:
+
+```bash
+make check EX=01        # implement exercises/starter/ex01_*.py until it passes
+make break-it           # list the bug catalogue; make break-it ID=<id> to inject one
+```
+
 ## JD → project map
 
 | JD: "What you'll own" / "What we need" | Project | Stack used |
@@ -82,7 +92,7 @@ cd llmops-projects/demandbase
 
 # No models needed
 make install          # Python deps
-make test             # 48 unit tests across all projects
+make test             # 49 unit tests across all projects
 make e2e              # real LiteLLM proxy + real config + plugins against mock providers
 make showback DEMO=1  # cost showback + budget alerts on synthetic traffic
 make cache-bench      # semantic-cache threshold sweep
@@ -109,12 +119,13 @@ make load RPS=3 DURATION=60
 
 | Check | How | Result |
 |---|---|---|
-| Unit tests (guardrails, cache, cost, metrics/tracing, evals, RAG) | `make test` | 48 passed |
+| Unit tests (guardrails, cache, cost, metrics/tracing, evals, RAG) | `make test` | 49 passed |
 | Gateway e2e: real LiteLLM proxy with this `config.yaml` and plugins, mock Ollama providers | `make e2e` | all 12 checks pass: routing, embeddings, injection block, PII redaction before the provider, exact cache, failover to secondary, clean 5xx on total outage, Prometheus series, served-by backend, guardrail block metric, ClickHouse-schema rows (DuckDB) |
 | Alert rules | `promtool check rules` + `promtool test rules` (4 scenarios) | pass. The tests caught a real bug: a routing label `team` was overwriting the metric's `team` label |
 | Kubernetes manifests | `kustomize build` + `kubeconform` | valid (CRDs skipped) |
 | Terraform | `terraform init -backend=false && terraform validate`, `fmt -check` | valid against the pinned module versions |
 | Lint | `ruff check .` | clean |
+| Learning material: every exercise solution passes (31); every break-it bug is caught (14/14); no broken lesson links | `make solutions`, `tools/break_it.py --all` | pass (CI: `learning-material` workflow) |
 
 Not run here: the Docker stack with real Ollama models (no Docker daemon in
 the environment this was built in), and `terraform plan/apply` (no AWS account).

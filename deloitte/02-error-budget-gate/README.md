@@ -1,5 +1,7 @@
 # 02 · Error-budget release gate (`budgetgate`, Go)
 
+> **Learning this?** Start with the lesson: [LEARN.md](LEARN.md) (concepts, walkthrough, exercises, break-it labs, self-check).
+
 > JD: *"gating production admission on error budgets and automated checks"*,
 > *"SLIs, SLOs, SLAs, error budgets"*, Go.
 

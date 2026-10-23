@@ -1,5 +1,7 @@
 # 02 · Guardrails (`guardkit`)
 
+> **Learning this?** Start with the lesson: [LEARN.md](LEARN.md) (concepts, walkthrough, exercises, break-it labs, self-check).
+
 > JD: *"input/output safety, PII handling, and policy enforcement at the gateway"*
 
 Fast, explainable guardrails that run inline on every gateway request.
@@ -32,5 +34,5 @@ explain in a postmortem. A classifier (e.g. Presidio or a small injection
 model) can sit behind the same `Decision` interface for teams that need it.
 
 ```bash
-make test   # 18 guardrail tests
+make test   # 19 guardrail tests
 ```

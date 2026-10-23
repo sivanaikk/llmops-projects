@@ -1,0 +1,169 @@
+# Bug catalogue for `python tools/break_it.py demandbase ...`
+# Each mutation is a small, realistic bug. `check` is the safeguard that must catch it.
+mutations:
+  - id: pii-no-luhn
+    project: 02-guardrails
+    title: Drop the Luhn check from the credit-card rule
+    file: 02-guardrails/guardkit/pii.py
+    find: 'validator=lambda m: _luhn_ok(re.sub(r"\D", "", m)),'
+    replace: "validator=None,"
+    check: pytest 02-guardrails/tests -k luhn
+    lesson: >
+      "13 to 19 digits" also matches order numbers, timestamps and phone numbers.
+      Without the checksum the gateway redacts or blocks legitimate prompts, and
+      teams start asking for the guardrail to be switched off.
+
+  - id: injection-scoring-disabled
+    project: 02-guardrails
+    title: Prompt-injection score always returns 0
+    file: 02-guardrails/guardkit/injection.py
+    find: "return InjectionVerdict(round(1.0 - p_clean, 3), matched)"
+    replace: "return InjectionVerdict(0.0, matched)"
+    check: pytest 02-guardrails/tests -k "injection or blocks_injection"
+    lesson: >
+      A guardrail that silently stops blocking looks exactly like a quiet day. Only
+      tests (and the guardrail-block metric dropping to zero) reveal it.
+
+  - id: guardrail-checks-system-prompt
+    project: 02-guardrails
+    title: Run injection checks on every message, including our own system prompt
+    file: 02-guardrails/guardkit/gateway.py
+    find: 'if msg.get("role") not in ("user", "tool"):'
+    replace: "if False:"
+    check: pytest 02-guardrails/tests -k redacts_user_messages_only
+    lesson: >
+      The system prompt is ours; redacting the support email in it changes product
+      behaviour. Check what users and tools send (tool output is attacker-controllable
+      too), not what the platform itself wrote.
+
+  - id: cache-tenant-leak
+    project: 03-semantic-cache
+    title: Cache scope ignores the tenant
+    file: 03-semantic-cache/semcache/cache.py
+    find: "return _hash(tenant, model, system_prompt)[:16]"
+    replace: "return _hash(model, system_prompt)[:16]"
+    check: pytest 03-semantic-cache/tests -k tenants
+    lesson: >
+      The most serious semantic-cache bug: customer A's question is "similar
+      enough" to customer B's, so B gets A's answer, including A's data. That's a
+      data breach caused by a performance optimisation.
+
+  - id: cache-no-ttl
+    project: 03-semantic-cache
+    title: Cache entries never expire
+    file: 03-semantic-cache/semcache/cache.py
+    find: "if entry and not self._expired(entry):"
+    replace: "if entry:"
+    check: pytest 03-semantic-cache/tests -k ttl
+    lesson: >
+      Account facts change (intent scores update daily). Without a TTL the cache
+      keeps serving yesterday's answer with full confidence, and nothing in the
+      latency or error metrics shows it.
+
+  - id: cache-caches-sampled-answers
+    project: 03-semantic-cache
+    title: Cache high-temperature (sampled) responses
+    file: 03-semantic-cache/semcache/cache.py
+    find: 'if request.get("temperature", 0) and request["temperature"] > 0.2:'
+    replace: "if False:"
+    check: pytest 03-semantic-cache/tests -k cacheable
+    lesson: >
+      A caller who sets temperature 0.9 wants varied output (drafts, brainstorming).
+      Caching freezes one sample and silently changes the feature's behaviour.
+
+  - id: cost-bills-cache-hits
+    project: 04-cost-control
+    title: Showback counts cache hits as spend
+    file: 04-cost-control/costwatch/report.py
+    find: "AND NOT cache_hit GROUP BY team"
+    replace: "GROUP BY team"
+    check: pytest 04-cost-control/tests -k cache_hits
+    lesson: >
+      Cache hits are recorded at what they would have cost so savings are visible.
+      Billing them as spend charges teams for money the platform saved, and makes
+      caching look like it costs more.
+
+  - id: cost-no-shadow-price
+    project: 04-cost-control
+    title: Self-hosted models report $0 and nothing fills in a price
+    file: 04-cost-control/costwatch/callback.py
+    find: "        cost = price(model_group, pt, ct)"
+    replace: "        cost = 0.0"
+    check: pytest 04-cost-control/tests -k shadow_price
+    lesson: >
+      Local models really cost $0 per token, so without shadow pricing every
+      showback, budget and cost alert reads zero, and nobody notices a team using
+      10x the capacity until the GPU bill or a capacity incident arrives.
+
+  - id: cost-sink-failure-fails-requests
+    project: 04-cost-control
+    title: A ClickHouse outage raises into the request path
+    file: 04-cost-control/costwatch/callback.py
+    find: "            except Exception:  # never fail a user request because billing is down"
+    replace: "            except ZeroDivisionError:  # oops, too narrow"
+    check: pytest 04-cost-control/tests -k dead_letters
+    lesson: >
+      Observability and billing must never take down the thing they observe. A
+      failed write goes to a dead-letter file and gets replayed; the user's request
+      still succeeds.
+
+  - id: metrics-unbounded-team-label
+    project: 05-llm-observability
+    title: Use the raw team value as a metric label
+    file: 05-llm-observability/llmobs/metrics.py
+    find: "return value if value in self.teams else self.overflow"
+    replace: "return value or self.overflow"
+    check: pytest 05-llm-observability/tests -k cardinality
+    lesson: >
+      Labels come from callers. One client sending a per-request team ID creates a
+      new time series per request: Prometheus memory and your Datadog bill explode
+      while queries slow to a crawl. Allowlist labels; put high-cardinality IDs in traces.
+
+  - id: traces-capture-raw-pii
+    project: 05-llm-observability
+    title: Capture prompts in traces without redaction
+    file: 05-llm-observability/llmobs/tracing.py
+    find: "        text = self.redact(text)"
+    replace: "        pass"
+    check: pytest 05-llm-observability/tests -k redacts
+    lesson: >
+      Trace backends have wider access and longer retention than the product
+      database. Unredacted prompt capture copies customer PII into a system that
+      was never approved to hold it.
+
+  - id: alert-routing-label-clobbers-team
+    project: 05-llm-observability
+    title: Route alerts with a `team` label (the real bug promtool caught)
+    file: 05-llm-observability/prometheus/rules/slo-alerts.yml
+    find: "        expr: sum by (team, reason) (rate(airt_guardrail_blocks_total[15m])) * 60 > 5\n        for: 10m\n        labels: {severity: ticket, owner: ai-runtime}"
+    replace: "        expr: sum by (team, reason) (rate(airt_guardrail_blocks_total[15m])) * 60 > 5\n        for: 10m\n        labels: {severity: ticket, team: ai-runtime}"
+    check: cd 05-llm-observability/prometheus/rules && promtool test rules slo-alerts.test.yml
+    needs: [promtool]
+    lesson: >
+      This exact bug was in the first version of these rules. A static `team:
+      ai-runtime` routing label overwrote the metric's own `team` label, so a
+      guardrail storm for account-intel arrived saying team=ai-runtime. Alert unit
+      tests caught it before anyone was paged with the wrong team.
+
+  - id: evals-unanswerable-scored-as-pass
+    project: 06-evals-harness
+    title: Fact recall gives full marks on unanswerable questions
+    file: 06-evals-harness/evalkit/scorers.py
+    find: "            return 1.0 if abstained(out.answer) else 0.0"
+    replace: "            return 1.0"
+    check: pytest 06-evals-harness/tests -k abstention
+    lesson: >
+      Without "I don't know" cases scored properly, a model that confidently makes
+      up a CFO's name scores as well as one that admits it doesn't know. Hallucination
+      becomes invisible to the eval.
+
+  - id: evals-gate-never-fails
+    project: 06-evals-harness
+    title: Regression check compares against the wrong bound
+    file: 06-evals-harness/evalkit/compare.py
+    find: "regression = tol is not None and hi < -tol"
+    replace: "regression = tol is not None and hi < -tol - 1"
+    check: pytest 06-evals-harness/tests -k regression
+    lesson: >
+      A gate that can't fail is worse than no gate: it gives everyone confidence
+      that a regression would have been caught. Test the gate with a known-bad candidate.

@@ -11,6 +11,21 @@ all-MiniLM). The point is the operational machinery around the model, not the
 model itself. Swapping in a hosted provider is a one-line change in the
 gateway config.
 
+## Start here: this is a course
+
+**[LEARNING_PATH.md](LEARNING_PATH.md)** puts every module in a learning order (about 30 hours). Each module has:
+
+| | |
+|---|---|
+| `LEARN.md` | the problem, the concepts and maths, a walkthrough with real output, self-check questions, interview prompts |
+| exercises | implement the core idea yourself; `make check EX=NN` tells you when it's right |
+| break-it labs | `make break-it ID=...` injects a real bug into a temp copy and shows which safeguard catches it |
+| demos | `python -m agentops.demo`, `make sentinel-demo`, `make cache-bench`, `make showback DEMO=1` |
+
+Most of it runs with **no GPU and no Docker**. Terms are explained in [GLOSSARY.md](GLOSSARY.md).
+
+## Labs
+
 | Company | Role | Folder | What gets built |
 |---|---|---|---|
 | Demandbase | DevOps Engineer, AI Runtime Services | [`demandbase/`](demandbase/) | LLM gateway (LiteLLM) with failover and quotas, guardrails, semantic cache, cost attribution, LLM observability, eval harness with CI gate, EKS/Karpenter/Flux infra, SLOs and runbooks |
@@ -22,6 +37,8 @@ gateway config.
 llmops-projects/
 └── <company>/
     ├── README.md        # JD -> project mapping, architecture, quickstart
-    ├── 01-.../          # one numbered folder per project, each with its own README and tests
+    ├── 01-.../          # one numbered folder per project: README, LEARN.md (the lesson), code, tests
+    ├── exercises/       # starter/ (yours), solutions/, tests/
+    ├── break-it.yaml    # bug catalogue for tools/break_it.py
     └── docker-compose.yml, Makefile, CI (GitLab for demandbase, GitHub Actions for deloitte)
 ```

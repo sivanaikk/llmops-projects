@@ -1,5 +1,7 @@
 # 04 · Cost control and showback (`costwatch`)
 
+> **Learning this?** Start with the lesson: [LEARN.md](LEARN.md) (concepts, walkthrough, exercises, break-it labs, self-check).
+
 > JD: *"Per-team and per-model attribution, budgets, quotas. LLM spend is the
 > kind of line item that quietly triples; your job is to make it legible and
 > then make it smaller."*

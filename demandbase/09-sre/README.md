@@ -1,5 +1,7 @@
 # 09 · SRE: SLOs, on-call, incidents
 
+> **Learning this?** Start with the lesson: [LEARN.md](LEARN.md) (concepts, walkthrough, exercises, break-it labs, self-check).
+
 > JD: *"SLOs, on-call, incident response, and the postmortems for the runtime.
 > This is a genuine SRE ownership role."*
 

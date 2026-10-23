@@ -1,5 +1,7 @@
 # 08 · Platform infrastructure: AWS EKS, Terraform, Karpenter, Flux
 
+> **Learning this?** Start with the lesson: [LEARN.md](LEARN.md) (concepts, walkthrough, exercises, break-it labs, self-check).
+
 > JD: *"Strong production infrastructure background: Kubernetes, AWS,
 > Terraform, GitOps"* and the stack *"EKS, Flux/GitOps, Karpenter"*.
 

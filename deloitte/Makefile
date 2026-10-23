@@ -4,7 +4,7 @@ PY ?= python3
 export PYTHONPATH := 01-agent-runtime:03-drift-cost-sentinel:04-agent-evals:05-resilience
 export MLFLOW_DISABLE_AGENT_HINT := 1
 
-.PHONY: help install test go-test lint validate up down ask evals eval-compare sentinel-demo load chaos capacity rules gate
+.PHONY: help install test go-test lint validate up down ask evals eval-compare sentinel-demo load chaos capacity rules gate exercises check solutions break-it check-go
 
 help:          ## list targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -61,3 +61,19 @@ chaos:         ## Toxiproxy experiments against the running stack
 
 gate:          ## error-budget gate against local Prometheus
 	cd 02-error-budget-gate && go run ./cmd/budgetgate check --slo slos/agent-runtime.yaml --prometheus http://localhost:9090
+
+# ---------------- learning ----------------
+exercises:     ## run all exercises against YOUR code in exercises/starter/
+	cd exercises && $(PY) -m pytest -p no:cacheprovider -q tests || true
+
+check:         ## EX=03 check one exercise (your code)
+	cd exercises && $(PY) -m pytest -p no:cacheprovider -q tests/test_ex$(EX)_*.py
+
+solutions:     ## run the exercise tests against the reference solutions
+	cd exercises && EXERCISE_IMPL=solutions $(PY) -m pytest -p no:cacheprovider -q tests
+
+break-it:      ## ID=<mutation> inject a bug and see what catches it (no ID: list them)
+	cd .. && $(PY) tools/break_it.py $(notdir $(CURDIR)) $(if $(ID),--run $(ID),--list)
+
+check-go:      ## Go exercise 07 (SOLUTION=1 for the reference)
+	cd exercises/go && go test $(if $(SOLUTION),-tags solution,) ./...

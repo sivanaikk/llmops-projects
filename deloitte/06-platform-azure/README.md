@@ -1,5 +1,7 @@
 # 06 · Platform: Azure, Terraform, Kubernetes, Argo CD
 
+> **Learning this?** Start with the lesson: [LEARN.md](LEARN.md) (concepts, walkthrough, exercises, break-it labs, self-check).
+
 > JD: *"Azure, Azure OpenAI"*, *"Kubernetes, Docker, Terraform, ArgoCD"*,
 > *"drift prevention"*, *"access controls"*.
 

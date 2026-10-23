@@ -1,0 +1,226 @@
+# Bug catalogue for `python tools/break_it.py deloitte ...`
+# Each mutation is a small, realistic bug. `check` is the safeguard that must catch it.
+# CI runs --all: a mutation that survives means a safeguard has gone missing.
+mutations:
+  - id: agent-no-loop-detection
+    project: 01-agent-runtime
+    title: Someone "simplifies" the agent loop and drops loop detection
+    file: 01-agent-runtime/agentops/agent.py
+    find: "if seen[key] > cfg.loop_threshold:"
+    replace: "if False and seen[key] > cfg.loop_threshold:"
+    check: pytest 01-agent-runtime/tests/test_agent.py -k loop_detection
+    lesson: >
+      Small models repeat the same tool call when an observation doesn't give them
+      what they expected. Without loop detection the run burns every remaining step
+      (and dollar) on identical calls, then ends on the step budget, so the failure
+      looks like "slow and expensive" instead of "stuck".
+
+  - id: agent-retries-everything
+    project: 01-agent-runtime
+    title: Retry every model error, not just transient ones
+    file: 01-agent-runtime/agentops/agent.py
+    find: "                if e.retryable:"
+    replace: "                if True:  # retry everything, what could go wrong"
+    check: pytest 01-agent-runtime/tests/test_agent.py -k non_retryable
+    lesson: >
+      A 400 (bad request, context too long, content filter) fails identically on
+      every attempt. Retrying it triples latency and cost for zero benefit, and
+      during an incident it multiplies load on a provider that is already struggling.
+      Retry 429/5xx/timeouts only.
+
+  - id: agent-no-false-claim-guard
+    project: 01-agent-runtime
+    title: Remove the guard that replaces "I deleted it" answers
+    file: 01-agent-runtime/agentops/agent.py
+    find: "if CLAIMED_CHANGE.search(answer) and not side_effects:"
+    replace: "if False:"
+    check: pytest 01-agent-runtime/tests/test_agent.py -k false_change
+    lesson: >
+      This is a real failure seen in CI: qwen2.5:1.5b told a user "The payments-api
+      deployment has been deleted." when it had no tool able to delete anything. A
+      user who believes that may skip the real cleanup or report a change that never
+      happened. Safety rules for small models belong in code; prompts are suggestions.
+
+  - id: agent-change-requests-reach-model
+    project: 01-agent-runtime
+    title: Let change requests through to the model
+    file: 01-agent-runtime/agentops/agent.py
+    find: "if CHANGE_REQUEST.match(question) and not side_effects:"
+    replace: "if False:"
+    check: pytest 01-agent-runtime/tests/test_agent.py -k change_requests
+    lesson: >
+      Deterministic policy ("this agent never performs changes") shouldn't depend on
+      a probabilistic model following instructions. Refusing in code is cheaper (no
+      model call), consistent, and testable.
+
+  - id: tools-no-circuit-breaker
+    project: 01-agent-runtime
+    title: Call tools directly, bypassing the circuit breaker
+    file: 01-agent-runtime/agentops/tools.py
+    find: "return self.breakers[name].call(once)"
+    replace: "return once()"
+    check: pytest 01-agent-runtime/tests/test_agent.py -k breaker_short_circuits
+    lesson: >
+      Without a breaker, every request waits the full tool timeout on a dependency
+      that is already down, and keeps hammering it while it tries to recover. With
+      it, failures cost microseconds and the dependency gets breathing room.
+
+  - id: sentinel-zscore-only
+    project: 03-drift-cost-sentinel
+    title: Flag hourly spend on z-score alone (no minimum effect size)
+    file: 03-drift-cost-sentinel/sentinel/detectors.py
+    find: "if med and spend < min_ratio * med:"
+    replace: "if False:"
+    check: pytest 03-drift-cost-sentinel/tests -k traffic_growth
+    lesson: >
+      This bug existed in the first version of the sentinel. A quiet, stable
+      baseline has a tiny MAD, so ordinary 20% traffic growth scored as a huge
+      anomaly. Statistically unusual is not the same as worth a ticket: require a
+      material effect too, or on-call learns to ignore the alert.
+
+  - id: sentinel-psi-log-zero
+    project: 03-drift-cost-sentinel
+    title: Drop the floor on PSI bin shares
+    file: 03-drift-cost-sentinel/sentinel/stats.py
+    find: "return [max(c / len(xs), 1e-4) for c in counts]  # floor avoids log(0)"
+    replace: "return [c / len(xs) for c in counts]"
+    check: pytest 03-drift-cost-sentinel/tests
+    lesson: >
+      Drift is exactly when a bin goes empty, so an unguarded ln(c/b) crashes the
+      detector at the moment it matters most. Monitoring code needs the same
+      edge-case care as product code.
+
+  - id: evals-pass-hat-k-is-average
+    project: 04-agent-evals
+    title: Report pass^k as the average pass rate
+    file: 04-agent-evals/agentevals/runner.py
+    find: "statistics.fmean(all(t.passed for t in ts) for ts in by_task.values())"
+    replace: "statistics.fmean(statistics.fmean(t.passed for t in ts) for ts in by_task.values())"
+    check: pytest 04-agent-evals/tests -k flaky
+    lesson: >
+      pass^k answers "will this task work every time?", the question an SLO asks.
+      Averaging hides flakiness: a task that passes 1 of 2 trials counts as half a
+      success instead of an unreliable task.
+
+  - id: evals-ignore-trajectory
+    project: 04-agent-evals
+    title: Stop checking which tools the agent used
+    file: 04-agent-evals/agentevals/suite.py
+    find: 'checks["tools_required"] = set(e["tools_required"]) <= set(tools)'
+    replace: 'checks["tools_required"] = True'
+    check: pytest 04-agent-evals/tests -k lazy
+    lesson: >
+      An agent that answers "Everything looks fine." without looking anything up
+      can still pass text checks on some tasks. Trajectory checks catch an agent
+      that guesses instead of grounding its answer in tool results.
+
+  - id: chaos-no-rollback
+    project: 05-resilience
+    title: Forget to remove the injected fault
+    file: 05-resilience/resilience/chaos.py
+    find: "for name in injected:"
+    replace: "for name in []:"
+    check: pytest 05-resilience/tests -k resilient
+    lesson: >
+      A chaos experiment that doesn't clean up is an outage you caused. Rollback
+      runs in `finally`, so it happens even when a probe crashes mid-experiment.
+
+  - id: chaos-skip-steady-state
+    project: 05-resilience
+    title: Inject faults without checking the system is healthy first
+    file: 05-resilience/resilience/chaos.py
+    find: "    if bad:"
+    replace: "    if False:"
+    check: pytest 05-resilience/tests -k unhealthy
+    lesson: >
+      If the system is already broken, injecting more failure teaches you nothing
+      and makes the incident worse. Verify the steady state first; abort otherwise.
+
+  - id: capacity-sized-for-average
+    project: 05-resilience
+    title: Size replicas for average latency instead of p95
+    file: 05-resilience/resilience/capacity.py
+    find: "in_flight_p95 * (1 + headroom)"
+    replace: "in_flight * (1 + headroom)"
+    check: pytest 05-resilience/tests -k littles_law
+    lesson: >
+      Agent latency has a long tail (more steps, retries). Sizing for the average
+      leaves no slots for the slow requests, so they queue, get slower, and the tail
+      grows: a feedback loop that turns a busy hour into an outage.
+
+  - id: gate-blocks-rollbacks
+    project: 02-error-budget-gate
+    title: The release gate stops special-casing rollbacks
+    file: 02-error-budget-gate/slo/gate.go
+    find: 'if req.ChangeType == "rollback" {'
+    replace: 'if req.ChangeType == "never" {'
+    check: cd 02-error-budget-gate && go test ./...
+    needs: [go]
+    lesson: >
+      During an incident the budget is burning fast, so a strict gate blocks
+      everything, including the rollback that would end the incident. Never gate
+      the way out.
+
+  - id: gate-fails-open
+    project: 02-error-budget-gate
+    title: Treat "Prometheus unreachable" as "safe to ship"
+    file: 02-error-budget-gate/slo/gate.go
+    find: 'if s.Gate.OnError == "open" {'
+    replace: 'if s.Gate.OnError != "never" {'
+    check: cd 02-error-budget-gate && go test ./...
+    needs: [go]
+    lesson: >
+      Monitoring is often degraded during the same incident that makes a release
+      risky. For tier-1 services, "no data" must mean "no release"; fail-open is a
+      deliberate per-service choice, not an accident.
+
+  - id: gate-ticket-unlocks-features
+    project: 02-error-budget-gate
+    title: Any ticket lets any change through a blocked gate
+    file: 02-error-budget-gate/slo/gate.go
+    find: 'if req.ChangeType == "fix" && ticketRe.MatchString(req.OverrideTicket) {'
+    replace: "if ticketRe.MatchString(req.OverrideTicket) {"
+    check: cd 02-error-budget-gate && go test ./...
+    needs: [go]
+    lesson: >
+      The error-budget policy freezes features, not fixes. If a ticket number
+      unlocks anything, the policy becomes "file a ticket to ship", and the budget
+      stops meaning anything.
+
+  - id: slo-counts-guardrail-stops
+    project: 08-sre-operations
+    title: Count budget stops as SLO errors
+    file: 02-error-budget-gate/slos/agent-runtime.yaml
+    find: 'errors: agent_runs_total{outcome=~"llm_unavailable|deadline|invalid_output"}'
+    replace: 'errors: agent_runs_total{outcome=~"llm_unavailable|deadline|invalid_output|budget_steps"}'
+    check: pytest tests/test_repo_consistency.py
+    lesson: >
+      A budget stop is the guardrail working. Counting it against availability
+      pages SRE for a prompt problem and pushes teams to raise the limits, which is
+      the wrong fix. It gets its own ticket-level alert instead.
+
+  - id: slo-edited-rules-not-regenerated
+    project: 02-error-budget-gate
+    title: Change an SLO objective but forget to regenerate the rules
+    file: 02-error-budget-gate/slos/agent-runtime.yaml
+    find: "objective: 0.99"
+    replace: "objective: 0.995"
+    check: cd 02-error-budget-gate && go run ./cmd/budgetgate rules --slos slos --out slo-check.yml && diff -q ../observability/prometheus/rules/slo-generated.yml slo-check.yml
+    needs: [go]
+    lesson: >
+      When one source of truth generates another file, they drift the first time
+      someone edits one and forgets the other: the gate would enforce 99.5% while
+      the alerts still page at 99%. CI regenerates and diffs on every push.
+
+  - id: alert-threshold-typo
+    project: observability
+    title: A threshold typo in the budget-stops alert (0.10 -> 0.50)
+    file: observability/prometheus/rules/agent-alerts.yml
+    find: "/ clamp_min(sum(rate(agent_runs_total[15m])), 1e-9) > 0.10"
+    replace: "/ clamp_min(sum(rate(agent_runs_total[15m])), 1e-9) > 0.50"
+    check: cd observability/prometheus/rules && promtool test rules alerts.test.yml
+    needs: [promtool]
+    lesson: >
+      Alert rules are code that only runs during incidents, which is the worst time
+      to find out it's wrong. promtool unit tests feed synthetic series and assert
+      the alert fires (and stays quiet) when it should.

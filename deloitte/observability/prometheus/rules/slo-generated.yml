@@ -44,14 +44,14 @@ groups:
             service: agent-runtime
             slo: availability
         - record: slo:error_budget_remaining
-          expr: 1 - (slo:error_ratio:rate28d{service="agent-runtime", slo="availability"} / 0.010000000000000009)
+          expr: 1 - (slo:error_ratio:rate28d{service="agent-runtime", slo="availability"} / 0.01)
           labels:
             service: agent-runtime
             slo: availability
     - name: slo-agent-runtime-availability-alerts
       rules:
         - alert: SLOFastBurn
-          expr: (slo:error_ratio:rate1h{service="agent-runtime", slo="availability"} / 0.010000000000000009 > 14.4) and (slo:error_ratio:rate5m{service="agent-runtime", slo="availability"} / 0.010000000000000009 > 14.4)
+          expr: (slo:error_ratio:rate1h{service="agent-runtime", slo="availability"} / 0.01 > 14.4) and (slo:error_ratio:rate5m{service="agent-runtime", slo="availability"} / 0.01 > 14.4)
           for: 2m
           labels:
             service: agent-runtime
@@ -62,7 +62,7 @@ groups:
             runbook_url: 08-sre-operations/runbooks/slo-burn.md
             summary: 'agent-runtime burning its error budget 14x: 2% of the budget per hour'
         - alert: SLOSlowBurn
-          expr: (slo:error_ratio:rate6h{service="agent-runtime", slo="availability"} / 0.010000000000000009 > 6) and (slo:error_ratio:rate30m{service="agent-runtime", slo="availability"} / 0.010000000000000009 > 6)
+          expr: (slo:error_ratio:rate6h{service="agent-runtime", slo="availability"} / 0.01 > 6) and (slo:error_ratio:rate30m{service="agent-runtime", slo="availability"} / 0.01 > 6)
           for: 15m
           labels:
             service: agent-runtime
@@ -73,7 +73,7 @@ groups:
             runbook_url: 08-sre-operations/runbooks/slo-burn.md
             summary: agent-runtime burning its error budget 6x over 6h
         - alert: SLOBudgetLeak
-          expr: (slo:error_ratio:rate3d{service="agent-runtime", slo="availability"} / 0.010000000000000009 > 1) and (slo:error_ratio:rate6h{service="agent-runtime", slo="availability"} / 0.010000000000000009 > 1)
+          expr: (slo:error_ratio:rate3d{service="agent-runtime", slo="availability"} / 0.01 > 1) and (slo:error_ratio:rate6h{service="agent-runtime", slo="availability"} / 0.01 > 1)
           for: 1h
           labels:
             service: agent-runtime
@@ -138,14 +138,14 @@ groups:
             service: llm-gateway
             slo: availability
         - record: slo:error_budget_remaining
-          expr: 1 - (slo:error_ratio:rate28d{service="llm-gateway", slo="availability"} / 0.0050000000000000044)
+          expr: 1 - (slo:error_ratio:rate28d{service="llm-gateway", slo="availability"} / 0.005)
           labels:
             service: llm-gateway
             slo: availability
     - name: slo-llm-gateway-availability-alerts
       rules:
         - alert: SLOFastBurn
-          expr: (slo:error_ratio:rate1h{service="llm-gateway", slo="availability"} / 0.0050000000000000044 > 14.4) and (slo:error_ratio:rate5m{service="llm-gateway", slo="availability"} / 0.0050000000000000044 > 14.4)
+          expr: (slo:error_ratio:rate1h{service="llm-gateway", slo="availability"} / 0.005 > 14.4) and (slo:error_ratio:rate5m{service="llm-gateway", slo="availability"} / 0.005 > 14.4)
           for: 2m
           labels:
             service: llm-gateway
@@ -156,7 +156,7 @@ groups:
             runbook_url: 08-sre-operations/runbooks/slo-burn.md
             summary: 'llm-gateway burning its error budget 14x: 2% of the budget per hour'
         - alert: SLOSlowBurn
-          expr: (slo:error_ratio:rate6h{service="llm-gateway", slo="availability"} / 0.0050000000000000044 > 6) and (slo:error_ratio:rate30m{service="llm-gateway", slo="availability"} / 0.0050000000000000044 > 6)
+          expr: (slo:error_ratio:rate6h{service="llm-gateway", slo="availability"} / 0.005 > 6) and (slo:error_ratio:rate30m{service="llm-gateway", slo="availability"} / 0.005 > 6)
           for: 15m
           labels:
             service: llm-gateway
@@ -167,7 +167,7 @@ groups:
             runbook_url: 08-sre-operations/runbooks/slo-burn.md
             summary: llm-gateway burning its error budget 6x over 6h
         - alert: SLOBudgetLeak
-          expr: (slo:error_ratio:rate3d{service="llm-gateway", slo="availability"} / 0.0050000000000000044 > 1) and (slo:error_ratio:rate6h{service="llm-gateway", slo="availability"} / 0.0050000000000000044 > 1)
+          expr: (slo:error_ratio:rate3d{service="llm-gateway", slo="availability"} / 0.005 > 1) and (slo:error_ratio:rate6h{service="llm-gateway", slo="availability"} / 0.005 > 1)
           for: 1h
           labels:
             service: llm-gateway

@@ -1,5 +1,7 @@
 # 03 · Drift and cost-anomaly sentinel (`sentinel`)
 
+> **Learning this?** Start with the lesson: [LEARN.md](LEARN.md) (concepts, walkthrough, exercises, break-it labs, self-check).
+
 > JD: *"Learn product domains quickly, including AI failure modes such as drift
 > and cost anomalies"*, *"cloud/AI cost engineering"*.
 

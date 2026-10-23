@@ -1,5 +1,7 @@
 # 01 · LLM gateway (LiteLLM)
 
+> **Learning this?** Start with the lesson: [LEARN.md](LEARN.md) (concepts, walkthrough, exercises, break-it labs, self-check).
+
 > JD: *"The single front door to every model provider we use: keys, routing,
 > rate limits, failover, provider quotas. When it's down, every AI feature at
 > Demandbase is down."*

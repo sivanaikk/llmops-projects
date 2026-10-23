@@ -1,5 +1,7 @@
 # 07 · DevSecOps and the SSDLC
 
+> **Learning this?** Start with the lesson: [LEARN.md](LEARN.md) (concepts, walkthrough, exercises, break-it labs, self-check).
+
 > JD: *"automation across the SSDLC"*, *"CI/CD, DevSecOps, ADO, GitHub, SonarQube"*,
 > *"segregation-of-duties controls"*, *"gating production admission on error
 > budgets and automated checks"*.

@@ -1,0 +1,73 @@
+# Keeps the course honest: every lesson link resolves, every reference solution
+# passes its exercise tests, and every bug in the break-it catalogues is still
+# caught by a safeguard.
+name: learning-material
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: learning-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  links:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tools/check_links.py
+
+  demandbase-tests:
+    runs-on: ubuntu-latest
+    defaults: {run: {working-directory: demandbase}}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12", cache: pip, cache-dependency-path: demandbase/requirements-dev.txt}
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check .
+      - run: pytest
+
+  exercises:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - uses: actions/setup-go@v5
+        with: {go-version: "1.24", cache: false}
+      - run: pip install pytest
+      - name: Reference solutions pass (both tracks)
+        run: |
+          (cd demandbase/exercises && EXERCISE_IMPL=solutions python -m pytest -q tests)
+          (cd deloitte/exercises && EXERCISE_IMPL=solutions python -m pytest -q tests)
+          (cd deloitte/exercises/go && go test -tags solution ./...)
+      - name: Starters are still unsolved (an exercise that already passes teaches nothing)
+        run: |
+          ! (cd demandbase/exercises && python -m pytest -q tests) >/dev/null
+          ! (cd deloitte/exercises && python -m pytest -q tests) >/dev/null
+          ! (cd deloitte/exercises/go && go test ./...) >/dev/null 2>&1
+
+  break-it:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12", cache: pip, cache-dependency-path: "**/requirements-dev.txt"}
+      - uses: actions/setup-go@v5
+        with: {go-version: "1.24", cache-dependency-path: deloitte/02-error-budget-gate/go.sum}
+      - name: Install promtool
+        run: |
+          curl -sSL https://github.com/prometheus/prometheus/releases/download/v2.54.1/prometheus-2.54.1.linux-amd64.tar.gz \
+            | tar xz -C /tmp && sudo cp /tmp/prometheus-2.54.1.linux-amd64/promtool /usr/local/bin/
+      - run: pip install -r demandbase/requirements-dev.txt -r deloitte/requirements-dev.txt
+      - name: Every injected bug is caught
+        env: {MLFLOW_DISABLE_AGENT_HINT: "1"}
+        run: |
+          python tools/break_it.py demandbase --all
+          python tools/break_it.py deloitte --all

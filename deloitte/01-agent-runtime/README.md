@@ -1,5 +1,7 @@
 # 01 · Agent runtime (`agentops`)
 
+> **Learning this?** Start with the lesson: [LEARN.md](LEARN.md) (concepts, walkthrough, exercises, break-it labs, self-check).
+
 > JD: *"Operate AI and agentic workloads reliably"*, *"AI failure modes"*,
 > *"code instrumentation"*.
 
@@ -32,7 +34,7 @@ run log with sizes and outcomes only, no prompt text, which feeds the drift sent
 ```bash
 python -m agentops "Is payments-api healthy, and can we deploy to it today?"   # needs Ollama
 uvicorn agentops.server:app --port 8000      # /run, /metrics, /healthz, /readyz
-pytest 01-agent-runtime                      # 26 tests, scripted model, no Ollama needed
+pytest 01-agent-runtime                      # 27 tests, scripted model, no Ollama needed
 ```
 
 `/readyz` checks the model backend, so Kubernetes takes a pod with a broken

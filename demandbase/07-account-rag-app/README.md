@@ -1,5 +1,7 @@
 # 07 · Account Intel: a RAG feature on the runtime
 
+> **Learning this?** Start with the lesson: [LEARN.md](LEARN.md) (concepts, walkthrough, exercises, break-it labs, self-check).
+
 > JD: *"you need to have built something with these tools: an agent, a RAG
 > pipeline, an internal tool, and to have used evals or experiments to decide
 > whether it was any good."*

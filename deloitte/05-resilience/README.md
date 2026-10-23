@@ -1,5 +1,7 @@
 # 05 · Resilience: load, chaos, capacity
 
+> **Learning this?** Start with the lesson: [LEARN.md](LEARN.md) (concepts, walkthrough, exercises, break-it labs, self-check).
+
 > JD: *"performance, chaos, and resilience testing"*, *"load testing, chaos
 > engineering, capacity planning, autoscaling"*, *"k6, JMeter, LoadRunner,
 > Azure Chaos Studio, AWS Fault Injector"*.

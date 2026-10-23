@@ -1,5 +1,7 @@
 # 04 · Agent evals and experiment tracking (`agentevals`)
 
+> **Learning this?** Start with the lesson: [LEARN.md](LEARN.md) (concepts, walkthrough, exercises, break-it labs, self-check).
+
 > JD: *"MLflow, LangFuse, LangSmith"*, *"MLOps/LLMOps"*, *"quick, low-cost
 > experiments"*.
 

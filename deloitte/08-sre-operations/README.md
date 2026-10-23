@@ -1,5 +1,7 @@
 # 08 · SRE operations
 
+> **Learning this?** Start with the lesson: [LEARN.md](LEARN.md) (concepts, walkthrough, exercises, break-it labs, self-check).
+
 > JD: *"Operate products and platforms to meet SLOs and error budgets, track
 > incident trends and toil"*, *"co-define SLOs and readiness with product
 > teams"*, *"write runbooks, technical specs, and blameless postmortems"*.
