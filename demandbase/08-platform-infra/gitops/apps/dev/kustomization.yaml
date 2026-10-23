@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../base/ai-runtime
+images:
+  - name: registry.gitlab.com/demandbase/ai-runtime/llm-gateway
+    newTag: 0.1.0
+patches:
+  # dev: one gateway replica is enough, keep the HPA floor low.
+  - target: {kind: HorizontalPodAutoscaler, name: llm-gateway}
+    patch: |
+      - op: replace
+        path: /spec/minReplicas
+        value: 1
+  - target: {kind: PodDisruptionBudget, name: llm-gateway}
+    patch: |
+      - op: replace
+        path: /spec/minAvailable
+        value: 0

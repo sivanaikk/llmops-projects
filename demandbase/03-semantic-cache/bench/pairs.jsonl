@@ -1,0 +1,16 @@
+{"a": "What is the intent score for Northwind Robotics?", "b": "Show me Northwind Robotics' intent score", "same": true}
+{"a": "Which accounts are in the decision stage this week?", "b": "List accounts that reached the decision stage this week", "same": true}
+{"a": "Summarize recent engagement for Acme Logistics", "b": "Give me a summary of Acme Logistics recent engagement", "same": true}
+{"a": "Who is the economic buyer at Contoso Health?", "b": "Who's the economic buyer for Contoso Health", "same": true}
+{"a": "How many web visits did Globex have last month?", "b": "Globex web visits last month count", "same": true}
+{"a": "Draft an intro email to the CTO of Initech", "b": "Write an introduction email for Initech's CTO", "same": true}
+{"a": "What keywords is Umbrella Analytics researching?", "b": "Which keywords is Umbrella Analytics researching", "same": true}
+{"a": "Is Stark Industries in market for data platforms?", "b": "Is Stark Industries in-market for a data platform?", "same": true}
+{"a": "What is the intent score for Northwind Robotics?", "b": "What is the intent score for Acme Logistics?", "same": false}
+{"a": "Which accounts are in the decision stage this week?", "b": "Which accounts are in the awareness stage this week?", "same": false}
+{"a": "Summarize recent engagement for Acme Logistics", "b": "Summarize the contract terms for Acme Logistics", "same": false}
+{"a": "Who is the economic buyer at Contoso Health?", "b": "Who is the technical champion at Contoso Health?", "same": false}
+{"a": "How many web visits did Globex have last month?", "b": "How many web visits did Globex have last year?", "same": false}
+{"a": "Draft an intro email to the CTO of Initech", "b": "Draft an intro email to the CFO of Initech", "same": false}
+{"a": "What keywords is Umbrella Analytics researching?", "b": "What competitors is Umbrella Analytics evaluating?", "same": false}
+{"a": "Is Stark Industries in market for data platforms?", "b": "Is Wayne Enterprises in market for data platforms?", "same": false}

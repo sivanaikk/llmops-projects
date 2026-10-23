@@ -1,0 +1,7 @@
+# Cost experiment: can the 360M model replace the 0.5B one for this feature?
+name: candidate-tiny
+model: chat-tiny
+prompt_version: v2
+top_k: 3
+temperature: 0
+max_tokens: 200

@@ -1,0 +1,13 @@
+# Soft budgets (early-warning alerts). Hard limits are set on the LiteLLM team
+# itself via 01-llm-gateway/scripts/bootstrap_teams.py (`max_budget`).
+budgets:
+  account-intel:
+    monthly_usd: 40
+    owner: "#team-account-intel"
+    alert_thresholds: [0.5, 0.8, 1.0]
+  internal-tools:
+    monthly_usd: 15
+    owner: "#ai-runtime"
+  data-science:
+    monthly_usd: 10
+    owner: "#ds-platform"

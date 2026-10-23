@@ -1,0 +1,22 @@
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: ai-runtime
+  namespace: flux-system
+spec:
+  dependsOn:
+    - name: infrastructure
+  interval: 5m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./llmops-projects/demandbase/08-platform-infra/gitops/apps/dev
+  prune: true
+  wait: true
+  timeout: 10m
+  # Roll back automatically if the gateway never becomes healthy.
+  healthChecks:
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: llm-gateway
+      namespace: ai-runtime

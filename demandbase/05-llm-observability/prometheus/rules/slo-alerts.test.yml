@@ -1,0 +1,66 @@
+# promtool test rules 05-llm-observability/prometheus/rules/slo-alerts.test.yml
+# Alerts are code: prove they fire on the failure they're meant for and stay
+# quiet on normal traffic.
+rule_files:
+  - slo-alerts.yml
+
+evaluation_interval: 1m
+
+tests:
+  # 10% errors for an hour => 20x burn => page.
+  - interval: 1m
+    input_series:
+      - series: 'airt_llm_requests_total{team="account-intel",model="chat-small",status="success",cache="miss"}'
+        values: '0+90x90'
+      - series: 'airt_llm_requests_total{team="account-intel",model="chat-small",status="error",cache="miss"}'
+        values: '0+10x90'
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: LLMGatewayErrorBudgetFastBurn
+        exp_alerts:
+          - exp_labels: {severity: page, owner: ai-runtime}
+            exp_annotations:
+              summary: "LLM gateway burning error budget 14x (2% of 28d budget per hour)"
+              runbook_url: "09-sre/runbooks/gateway-errors.md"
+
+  # 0.1% errors is within budget => no page.
+  - interval: 1m
+    input_series:
+      - series: 'airt_llm_requests_total{team="account-intel",model="chat-small",status="success",cache="miss"}'
+        values: '0+999x90'
+      - series: 'airt_llm_requests_total{team="account-intel",model="chat-small",status="error",cache="miss"}'
+        values: '0+1x90'
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: LLMGatewayErrorBudgetFastBurn
+        exp_alerts: []
+
+  # Primary provider down: 80% of chat-small served by the secondary for 20m.
+  - interval: 1m
+    input_series:
+      - series: 'airt_llm_served_by_total{model="chat-small",backend="primary"}'
+        values: '0+2x30'
+      - series: 'airt_llm_served_by_total{model="chat-small",backend="secondary"}'
+        values: '0+8x30'
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: LLMPrimaryProviderDegraded
+        exp_alerts:
+          - exp_labels: {severity: ticket, owner: ai-runtime}
+            exp_annotations:
+              summary: "Most chat-small traffic is failing over to the secondary provider"
+              runbook_url: "09-sre/runbooks/provider-failover.md"
+
+  # Guardrail block storm.
+  - interval: 1m
+    input_series:
+      - series: 'airt_guardrail_blocks_total{team="account-intel",reason="prompt_injection"}'
+        values: '0+10x40'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: GuardrailBlockSpike
+        exp_alerts:
+          - exp_labels: {severity: ticket, owner: ai-runtime, team: account-intel, reason: prompt_injection}
+            exp_annotations:
+              summary: "account-intel: >5 guardrail blocks/min (prompt_injection) - attack or bad policy rollout"
+              runbook_url: "09-sre/runbooks/guardrail-spike.md"

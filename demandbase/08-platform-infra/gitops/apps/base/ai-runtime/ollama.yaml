@@ -1,0 +1,101 @@
+# Two independent model servers stand in for two providers (see 01-llm-gateway/config.yaml).
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: ollama-primary
+spec:
+  serviceName: ollama-primary
+  replicas: 1
+  selector:
+    matchLabels: {app: ollama, provider: primary}
+  template:
+    metadata:
+      labels: {app: ollama, provider: primary}
+    spec:
+      nodeSelector: {workload: model-cpu}
+      tolerations: [{key: workload, value: model, effect: NoSchedule}]
+      initContainers:
+        - name: pull-models
+          image: ollama/ollama:0.12.6
+          command: ["/bin/sh", "-c"]
+          args:
+            - ollama serve & sleep 5 && ollama pull qwen2.5:0.5b && ollama pull all-minilm && kill %1
+          volumeMounts: [{name: models, mountPath: /root/.ollama}]
+      containers:
+        - name: ollama
+          image: ollama/ollama:0.12.6
+          ports: [{containerPort: 11434, name: http}]
+          env:
+            - {name: OLLAMA_KEEP_ALIVE, value: "-1"}    # keep models resident: no cold loads
+            - {name: OLLAMA_NUM_PARALLEL, value: "4"}
+          resources:
+            requests: {cpu: "4", memory: 4Gi}
+            limits: {memory: 6Gi}
+          readinessProbe:
+            httpGet: {path: /api/tags, port: http}
+            periodSeconds: 10
+          volumeMounts: [{name: models, mountPath: /root/.ollama}]
+  volumeClaimTemplates:
+    - metadata: {name: models}
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: {requests: {storage: 10Gi}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama-primary
+spec:
+  selector: {app: ollama, provider: primary}
+  ports: [{port: 11434, targetPort: http, name: http}]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: ollama-secondary
+spec:
+  serviceName: ollama-secondary
+  replicas: 1
+  selector:
+    matchLabels: {app: ollama, provider: secondary}
+  template:
+    metadata:
+      labels: {app: ollama, provider: secondary}
+    spec:
+      nodeSelector: {workload: model-cpu}
+      tolerations: [{key: workload, value: model, effect: NoSchedule}]
+      initContainers:
+        - name: pull-models
+          image: ollama/ollama:0.12.6
+          command: ["/bin/sh", "-c"]
+          args:
+            - ollama serve & sleep 5 && ollama pull qwen2.5:0.5b && ollama pull smollm2:360m && ollama pull qwen2.5:1.5b && kill %1
+          volumeMounts: [{name: models, mountPath: /root/.ollama}]
+      containers:
+        - name: ollama
+          image: ollama/ollama:0.12.6
+          ports: [{containerPort: 11434, name: http}]
+          env:
+            - {name: OLLAMA_KEEP_ALIVE, value: "-1"}
+            - {name: OLLAMA_NUM_PARALLEL, value: "4"}
+            - {name: OLLAMA_MAX_LOADED_MODELS, value: "3"}
+          resources:
+            requests: {cpu: "6", memory: 6Gi}
+            limits: {memory: 8Gi}
+          readinessProbe:
+            httpGet: {path: /api/tags, port: http}
+            periodSeconds: 10
+          volumeMounts: [{name: models, mountPath: /root/.ollama}]
+  volumeClaimTemplates:
+    - metadata: {name: models}
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: {requests: {storage: 10Gi}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama-secondary
+spec:
+  selector: {app: ollama, provider: secondary}
+  ports: [{port: 11434, targetPort: http, name: http}]

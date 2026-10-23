@@ -1,0 +1,16 @@
+{"id": "q01", "question": "Who is the economic buyer at Northwind Robotics?", "must_include": ["Priya Raman"], "source": "northwind-robotics#buying-group", "tags": ["lookup", "people"]}
+{"id": "q02", "question": "What is the intent score for Initech SaaS?", "must_include": ["91"], "source": "initech-saas#intent-and-engagement", "tags": ["lookup", "number"]}
+{"id": "q03", "question": "Which CRM does Acme Logistics use?", "must_include": ["Dynamics"], "source": "acme-logistics#profile", "tags": ["lookup"]}
+{"id": "q04", "question": "What journey stage is Globex Fintech in?", "must_include": ["Awareness"], "source": "globex-fintech#intent-and-engagement", "tags": ["lookup"]}
+{"id": "q05", "question": "Who is the technical champion at Contoso Health?", "must_include": ["Dana Ortiz"], "source": "contoso-health#buying-group", "tags": ["lookup", "people"]}
+{"id": "q06", "question": "Which competing vendor is Northwind Robotics evaluating?", "must_include": ["6sense"], "source": "northwind-robotics#notes", "tags": ["lookup"]}
+{"id": "q07", "question": "How many web visits did Initech SaaS have in the last 30 days?", "must_include": ["655"], "source": "initech-saas#intent-and-engagement", "tags": ["lookup", "number"]}
+{"id": "q08", "question": "Where does Umbrella Analytics want data delivered?", "must_include": ["Snowflake"], "source": "umbrella-analytics#notes", "tags": ["lookup"]}
+{"id": "q09", "question": "What does Northwind Robotics procurement require before a contract?", "must_include": ["SOC 2"], "source": "northwind-robotics#buying-group", "tags": ["lookup", "compliance"]}
+{"id": "q10", "question": "Should we run an outbound sequence for Globex Fintech?", "must_include": ["nurture"], "source": "globex-fintech#notes", "tags": ["reasoning"]}
+{"id": "q11", "question": "Which identity provider does Initech SaaS require for single sign-on?", "must_include": ["Okta"], "source": "initech-saas#notes", "tags": ["lookup"]}
+{"id": "q12", "question": "Where is Acme Logistics headquartered?", "must_include": ["Rotterdam"], "source": "acme-logistics#profile", "tags": ["lookup"]}
+{"id": "q13", "question": "Who is the CFO of Contoso Health?", "must_include": ["don't know"], "source": null, "tags": ["unanswerable"]}
+{"id": "q14", "question": "What is Umbrella Analytics' stock ticker?", "must_include": ["don't know"], "source": null, "tags": ["unanswerable"]}
+{"id": "q15", "question": "Which account has the highest intent score: Northwind Robotics or Contoso Health?", "must_include": ["Northwind"], "source": "northwind-robotics#intent-and-engagement", "tags": ["reasoning", "number"]}
+{"id": "q16", "question": "What data will Contoso Health refuse to share?", "must_include": ["patient"], "source": "contoso-health#notes", "tags": ["lookup", "compliance"]}

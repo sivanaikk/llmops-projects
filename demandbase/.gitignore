@@ -1,0 +1,11 @@
+.env
+.keys.env
+*.duckdb
+*.duckdb.wal
+usage.jsonl
+06-evals-harness/results/
+.terraform/
+*.tfstate*
+__pycache__/
+.pytest_cache/
+.ruff_cache/

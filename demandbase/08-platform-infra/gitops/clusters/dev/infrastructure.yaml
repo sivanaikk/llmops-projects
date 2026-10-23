@@ -1,0 +1,15 @@
+# Flux entrypoint for the dev cluster (bootstrap with `flux bootstrap gitlab ... --path=08-platform-infra/gitops/clusters/dev`).
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: infrastructure
+  namespace: flux-system
+spec:
+  interval: 10m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./llmops-projects/demandbase/08-platform-infra/gitops/infrastructure
+  prune: true
+  wait: true
+  timeout: 5m

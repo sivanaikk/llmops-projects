@@ -1,0 +1,166 @@
+# AI Runtime Services lab: the whole runtime on one laptop, CPU only.
+#
+#   make up        # build + start everything, pull the small models
+#   make bootstrap # create teams + virtual keys
+#   make smoke     # end-to-end checks
+#
+# Total model footprint is about 2 GB (qwen2.5:0.5b x2, smollm2:360m, qwen2.5:1.5b, all-minilm).
+
+x-ollama: &ollama
+  image: ollama/ollama:0.12.6
+  restart: unless-stopped
+  environment:
+    OLLAMA_KEEP_ALIVE: 30m
+    OLLAMA_NUM_PARALLEL: "4"
+    OLLAMA_MAX_LOADED_MODELS: "3"
+  healthcheck:
+    test: ["CMD", "ollama", "list"]
+    interval: 10s
+    timeout: 5s
+    retries: 12
+
+services:
+  # ---------------- "model providers" ----------------
+  ollama-primary:
+    <<: *ollama
+    volumes: [ollama-primary:/root/.ollama]
+
+  ollama-secondary:
+    <<: *ollama
+    volumes: [ollama-secondary:/root/.ollama]
+
+  model-puller:
+    image: ollama/ollama:0.12.6
+    depends_on:
+      ollama-primary: {condition: service_healthy}
+      ollama-secondary: {condition: service_healthy}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        OLLAMA_HOST=http://ollama-primary:11434   ollama pull qwen2.5:0.5b
+        OLLAMA_HOST=http://ollama-primary:11434   ollama pull all-minilm
+        OLLAMA_HOST=http://ollama-secondary:11434 ollama pull qwen2.5:0.5b
+        OLLAMA_HOST=http://ollama-secondary:11434 ollama pull smollm2:360m
+        OLLAMA_HOST=http://ollama-secondary:11434 ollama pull qwen2.5:1.5b
+    restart: "no"
+
+  # ---------------- gateway + its state ----------------
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: litellm
+      POSTGRES_PASSWORD: litellm
+      POSTGRES_DB: litellm
+    volumes: [postgres:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U litellm"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+
+  gateway:
+    build:
+      context: .
+      dockerfile: 01-llm-gateway/Dockerfile
+    command: ["--config", "/app/plugins/01-llm-gateway/config.yaml", "--port", "4000", "--num_workers", "1"]
+    ports: ["4000:4000", "9464:9464"]
+    env_file: [.env]
+    environment:
+      DATABASE_URL: postgresql://litellm:litellm@postgres:5432/litellm
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      COSTWATCH_SINK: clickhouse
+      CLICKHOUSE_URL: http://clickhouse:8123
+      OTEL_EXPORTER: otlp_http
+      OTEL_ENDPOINT: http://jaeger:4318/v1/traces
+      OTEL_SERVICE_NAME: llm-gateway
+      GUARDKIT_POLICIES: /app/plugins/02-guardrails/policies.yaml
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      clickhouse: {condition: service_healthy}
+      ollama-primary: {condition: service_healthy}
+      ollama-secondary: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:4000/health/liveliness')\""]
+      interval: 10s
+      retries: 30
+
+  # ---------------- sample product feature ----------------
+  account-intel:
+    build:
+      context: .
+      dockerfile: 07-account-rag-app/Dockerfile
+    ports: ["8080:8080"]
+    environment:
+      GATEWAY_URL: http://gateway:4000
+      GATEWAY_API_KEY: ${ACCOUNT_INTEL_PROD_KEY:-${LITELLM_MASTER_KEY}}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_SERVICE_NAME: account-intel
+      LLMOBS_CAPTURE_RATIO: "0.2"
+    depends_on:
+      gateway: {condition: service_healthy}
+
+  # ---------------- observability + cost ----------------
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    ports: ["8123:8123"]
+    environment:
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    volumes:
+      - ./04-cost-control/sql/clickhouse_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - clickhouse:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8123/ping"]
+      interval: 5s
+      retries: 20
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    ports: ["9090:9090"]
+    volumes:
+      - ./05-llm-observability/prometheus:/etc/prometheus:ro
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--web.enable-lifecycle"]
+
+  loki:
+    image: grafana/loki:3.2.0
+    ports: ["3100:3100"]
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+
+  promtail:
+    image: grafana/promtail:3.2.0
+    volumes:
+      - ./05-llm-observability/loki/promtail.yml:/etc/promtail/config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command: ["-config.file=/etc/promtail/config.yml"]
+    depends_on: [loki]
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    ports: ["16686:16686", "4318:4318"]
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+
+  grafana:
+    image: grafana/grafana:11.2.2
+    ports: ["3000:3000"]
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_INSTALL_PLUGINS: grafana-clickhouse-datasource
+    volumes:
+      - ./05-llm-observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./05-llm-observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on: [prometheus, loki, clickhouse]
+
+volumes:
+  ollama-primary:
+  ollama-secondary:
+  postgres:
+  clickhouse:

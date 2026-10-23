@@ -1,0 +1,135 @@
+# GitLab CI for the AI runtime. Include from the repo root with:
+#   include: { local: llmops-projects/demandbase/.gitlab-ci.yml }
+#
+# Pipeline shape (every stage gates the next):
+#   lint/test -> validate (alerts, k8s, terraform) -> e2e (real LiteLLM, mock providers)
+#   -> eval gate (prompt/model changes only) -> build image -> bump tag for Flux
+
+variables:
+  APP_DIR: llmops-projects/demandbase
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  GATEWAY_IMAGE: $CI_REGISTRY_IMAGE/llm-gateway
+
+stages: [test, validate, e2e, eval, build, deploy]
+
+default:
+  image: python:3.11-slim
+  cache:
+    key: pip-$CI_JOB_NAME
+    paths: [.cache/pip]
+  before_script:
+    - cd $APP_DIR
+
+.python:
+  before_script:
+    - cd $APP_DIR
+    - pip install -q -r requirements-dev.txt
+
+lint:
+  stage: test
+  extends: .python
+  script:
+    - ruff check .
+
+unit-tests:
+  stage: test
+  extends: .python
+  script:
+    - pytest --junitxml=report.xml
+  artifacts:
+    reports:
+      junit: $APP_DIR/report.xml
+
+alert-rules:
+  stage: validate
+  image: {name: prom/prometheus:v2.54.1, entrypoint: [""]}
+  script:
+    - promtool check rules 05-llm-observability/prometheus/rules/slo-alerts.yml
+    - promtool test rules 05-llm-observability/prometheus/rules/slo-alerts.test.yml
+
+gitops-manifests:
+  stage: validate
+  image: alpine:3.20
+  script:
+    - apk add --no-cache curl python3 py3-yaml
+    - curl -sSL https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv5.4.3/kustomize_v5.4.3_linux_amd64.tar.gz | tar xz -C /usr/local/bin
+    - curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz -C /usr/local/bin
+    - python3 08-platform-infra/scripts/gen_prometheus_rule.py --check
+    - kustomize build 08-platform-infra/gitops/apps/dev | kubeconform -strict -ignore-missing-schemas -summary
+    - kustomize build 08-platform-infra/gitops/infrastructure | kubeconform -strict -ignore-missing-schemas -summary
+
+terraform:
+  stage: validate
+  image: {name: hashicorp/terraform:1.9.8, entrypoint: [""]}
+  script:
+    - cd 08-platform-infra/terraform
+    - terraform fmt -check -recursive
+    - terraform init -backend=false -input=false
+    - terraform validate
+  # `terraform plan` runs in a separate protected job with AWS OIDC creds.
+
+gateway-e2e:
+  stage: e2e
+  extends: .python
+  script:
+    - python 01-llm-gateway/e2e/run_e2e.py
+  rules:
+    - changes:
+        - $APP_DIR/01-llm-gateway/**/*
+        - $APP_DIR/02-guardrails/**/*
+        - $APP_DIR/04-cost-control/**/*
+        - $APP_DIR/05-llm-observability/llmobs/**/*
+
+# Runs the real evals against a review gateway when prompts, models or the
+# RAG pipeline change. Needs GATEWAY_URL + GATEWAY_API_KEY (evals-runner key,
+# budget-capped) as masked CI variables.
+eval-gate:
+  stage: eval
+  extends: .python
+  timeout: 45m
+  script:
+    - export PYTHONPATH=02-guardrails:03-semantic-cache:05-llm-observability:06-evals-harness:07-account-rag-app
+    - python -m evalkit run 06-evals-harness/variants/baseline.yaml --judge
+    - python -m evalkit run 06-evals-harness/variants/candidate-prompt-v2.yaml --judge
+    - python -m evalkit compare baseline candidate-prompt-v2 --report eval-report.md
+  artifacts:
+    when: always
+    paths: [$APP_DIR/eval-report.md, $APP_DIR/06-evals-harness/results/]
+    expose_as: eval report
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - $APP_DIR/07-account-rag-app/account_rag/prompts.py
+        - $APP_DIR/07-account-rag-app/account_rag/**/*
+        - $APP_DIR/06-evals-harness/**/*
+        - $APP_DIR/01-llm-gateway/config.yaml
+
+build-gateway:
+  stage: build
+  image: docker:27
+  services: [docker:27-dind]
+  before_script:
+    - cd $APP_DIR
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+  script:
+    - docker build -f 01-llm-gateway/Dockerfile -t $GATEWAY_IMAGE:$CI_COMMIT_SHORT_SHA .
+    - docker push $GATEWAY_IMAGE:$CI_COMMIT_SHORT_SHA
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# GitOps: CI never touches the cluster. It commits the new tag; Flux rolls it
+# out and its healthCheck on the gateway Deployment gates the rollout.
+bump-dev-tag:
+  stage: deploy
+  image: alpine:3.20
+  before_script:
+    - apk add --no-cache git curl
+    - curl -sSL https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv5.4.3/kustomize_v5.4.3_linux_amd64.tar.gz | tar xz -C /usr/local/bin
+  script:
+    - cd $APP_DIR/08-platform-infra/gitops/apps/dev
+    - kustomize edit set image registry.gitlab.com/demandbase/ai-runtime/llm-gateway=$GATEWAY_IMAGE:$CI_COMMIT_SHORT_SHA
+    - git config user.email "ci@ai-runtime" && git config user.name "ai-runtime-ci"
+    - git commit -am "deploy(dev): llm-gateway $CI_COMMIT_SHORT_SHA [skip ci]"
+    - git push "https://oauth2:${GITOPS_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git" HEAD:$CI_DEFAULT_BRANCH
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

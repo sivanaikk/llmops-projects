@@ -1,0 +1,26 @@
+# LLMOps Projects
+
+Hands-on LLMOps projects, each built against a real job description. They
+apply the ideas from the handbook in [`../content`](../content) (serving,
+metrics, caching, cost, routing) to the platform side of running LLMs:
+gateways, guardrails, observability, evals and SRE.
+
+**Small models only.** Every project runs on sub-2B-parameter models through
+[Ollama](https://ollama.com) on a laptop CPU (Qwen2.5-0.5B/1.5B, SmolLM2-360M,
+all-MiniLM). The point is the operational machinery around the model, not the
+model itself. Swapping in a hosted provider is a one-line change in the
+gateway config.
+
+| Company | Role | Folder | What gets built |
+|---|---|---|---|
+| Demandbase | DevOps Engineer, AI Runtime Services | [`demandbase/`](demandbase/) | LLM gateway (LiteLLM) with failover and quotas, guardrails, semantic cache, cost attribution, LLM observability, eval harness with CI gate, EKS/Karpenter/Flux infra, SLOs and runbooks |
+
+## Layout convention
+
+```
+llmops-projects/
+└── <company>/
+    ├── README.md        # JD -> project mapping, architecture, quickstart
+    ├── 01-.../          # one numbered folder per project, each with its own README and tests
+    └── docker-compose.yml, Makefile, .gitlab-ci.yml
+```

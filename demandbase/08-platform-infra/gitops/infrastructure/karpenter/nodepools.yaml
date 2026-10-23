@@ -1,0 +1,66 @@
+# CPU-only inference: the small models (<=1.5B params) run fine on Graviton.
+# Gateway pods are latency-critical and stay on on-demand; the model servers
+# tolerate spot interruption because the gateway fails over between them.
+apiVersion: karpenter.k8s.aws/v1
+kind: EC2NodeClass
+metadata:
+  name: default
+spec:
+  amiSelectorTerms:
+    - alias: al2023@latest
+  role: KarpenterNodeRole-ai-runtime-dev   # output karpenter_node_role
+  subnetSelectorTerms:
+    - tags: {karpenter.sh/discovery: ai-runtime-dev}
+  securityGroupSelectorTerms:
+    - tags: {karpenter.sh/discovery: ai-runtime-dev}
+  blockDeviceMappings:
+    - deviceName: /dev/xvda
+      ebs: {volumeSize: 80Gi, volumeType: gp3, encrypted: true}
+---
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: gateway
+spec:
+  template:
+    metadata:
+      labels: {workload: gateway}
+    spec:
+      nodeClassRef: {group: karpenter.k8s.aws, kind: EC2NodeClass, name: default}
+      requirements:
+        - {key: karpenter.sh/capacity-type, operator: In, values: [on-demand]}
+        - {key: kubernetes.io/arch, operator: In, values: [arm64]}
+        - {key: karpenter.k8s.aws/instance-category, operator: In, values: [c, m]}
+        - {key: karpenter.k8s.aws/instance-size, operator: In, values: [large, xlarge]}
+      taints:
+        - {key: workload, value: gateway, effect: NoSchedule}
+      expireAfter: 720h
+  limits: {cpu: "32"}
+  disruption:
+    consolidationPolicy: WhenEmptyOrUnderutilized
+    consolidateAfter: 5m
+    budgets:
+      - nodes: "1"            # never drain more than one gateway node at a time
+---
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: model-cpu
+spec:
+  template:
+    metadata:
+      labels: {workload: model-cpu}
+    spec:
+      nodeClassRef: {group: karpenter.k8s.aws, kind: EC2NodeClass, name: default}
+      requirements:
+        - {key: karpenter.sh/capacity-type, operator: In, values: [spot, on-demand]}
+        - {key: kubernetes.io/arch, operator: In, values: [arm64]}
+        - {key: karpenter.k8s.aws/instance-category, operator: In, values: [c, m, r]}
+        - {key: karpenter.k8s.aws/instance-cpu, operator: In, values: ["8", "16"]}
+      taints:
+        - {key: workload, value: model, effect: NoSchedule}
+      expireAfter: 168h
+  limits: {cpu: "64"}
+  disruption:
+    consolidationPolicy: WhenEmptyOrUnderutilized
+    consolidateAfter: 10m

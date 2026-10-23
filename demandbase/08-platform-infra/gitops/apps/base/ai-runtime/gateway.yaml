@@ -1,0 +1,109 @@
+# LiteLLM gateway. config.yaml + plugins are baked into the image
+# (01-llm-gateway/Dockerfile), so a config change is an image tag bump that
+# goes through CI (tests + eval gate) and a Flux rollout, never a kubectl edit.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm-gateway
+  labels: {app: llm-gateway}
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxUnavailable: 0, maxSurge: 1}
+  selector:
+    matchLabels: {app: llm-gateway}
+  template:
+    metadata:
+      labels: {app: llm-gateway}
+    spec:
+      nodeSelector: {workload: gateway}
+      tolerations: [{key: workload, value: gateway, effect: NoSchedule}]
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector: {matchLabels: {app: llm-gateway}}
+      terminationGracePeriodSeconds: 90   # let in-flight generations finish
+      containers:
+        - name: gateway
+          image: registry.gitlab.com/demandbase/ai-runtime/llm-gateway:0.1.0   # bumped by CI
+          args: ["--config", "/app/plugins/01-llm-gateway/config.yaml", "--port", "4000", "--num_workers", "1"]
+          ports:
+            - {containerPort: 4000, name: http}
+            - {containerPort: 9464, name: metrics}
+          envFrom:
+            - secretRef: {name: llm-gateway}
+          env:
+            - {name: REDIS_PORT, value: "6379"}
+            - {name: COSTWATCH_SINK, value: clickhouse}
+            - {name: CLICKHOUSE_URL, value: "http://clickhouse.observability:8123"}
+            - {name: OTEL_EXPORTER, value: otlp_http}
+            - {name: OTEL_ENDPOINT, value: "http://otel-collector.observability:4318/v1/traces"}
+            - {name: OTEL_SERVICE_NAME, value: llm-gateway}
+          resources:
+            requests: {cpu: 500m, memory: 1Gi}
+            limits: {memory: 2Gi}
+          readinessProbe:
+            httpGet: {path: /health/readiness, port: http}
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: {path: /health/liveliness, port: http}
+            periodSeconds: 15
+            failureThreshold: 4
+          lifecycle:
+            preStop:
+              exec: {command: ["sleep", "10"]}   # drain from the Service before shutdown
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm-gateway
+  labels: {app: llm-gateway}
+spec:
+  selector: {app: llm-gateway}
+  ports:
+    - {port: 4000, targetPort: http, name: http}
+    - {port: 9464, targetPort: metrics, name: metrics}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: llm-gateway
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels: {app: llm-gateway}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: llm-gateway
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: llm-gateway}
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: {type: Utilization, averageUtilization: 60}
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: llm-gateway
+spec:
+  selector:
+    matchLabels: {app: llm-gateway}
+  endpoints:
+    - port: metrics
+      interval: 15s

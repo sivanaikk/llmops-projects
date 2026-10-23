@@ -1,0 +1,32 @@
+# Teams, model access and HARD limits enforced by the gateway.
+# Applied with: python scripts/bootstrap_teams.py
+# Soft (early-warning) budgets live in 04-cost-control/budgets.yaml.
+teams:
+  - team_alias: account-intel
+    models: [chat-small, chat-tiny, embed-small]
+    max_budget: 50          # USD per budget_duration; requests are rejected past this
+    budget_duration: 30d
+    rpm_limit: 120
+    tpm_limit: 150000
+    keys:
+      - key_alias: account-intel-prod
+      - key_alias: account-intel-ci
+        max_budget: 2
+        rpm_limit: 20
+
+  - team_alias: internal-tools
+    models: [chat-small, chat-tiny, embed-small]
+    max_budget: 20
+    budget_duration: 30d
+    rpm_limit: 60
+    tpm_limit: 60000
+    keys:
+      - key_alias: slack-bot
+
+  - team_alias: data-science
+    models: [chat-small, chat-tiny, judge, embed-small]
+    max_budget: 15
+    budget_duration: 30d
+    rpm_limit: 30
+    keys:
+      - key_alias: evals-runner

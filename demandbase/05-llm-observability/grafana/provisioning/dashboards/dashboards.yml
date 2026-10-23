@@ -1,0 +1,7 @@
+apiVersion: 1
+providers:
+  - name: ai-runtime
+    folder: AI Runtime
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards

@@ -1,0 +1,26 @@
+# Guardrail policies, keyed by LiteLLM team alias.
+# Unknown teams fall back to `default`. Changes go through MR review like any
+# other runtime config.
+policies:
+  default:
+    pii_action: redact
+    block_pii_entities: [US_SSN, CREDIT_CARD, AWS_ACCESS_KEY, API_KEY]
+    injection_threshold: 0.5
+    max_input_chars: 32000
+    output_pii_action: redact
+
+  # Customer-facing copilot inside the Demandbase app: strictest settings.
+  account-intel:
+    pii_action: redact
+    block_pii_entities: [US_SSN, CREDIT_CARD, IN_AADHAAR, IN_PAN, AWS_ACCESS_KEY, API_KEY]
+    injection_threshold: 0.4
+    max_input_chars: 16000
+    denied_topics: [password, "social security"]
+    output_pii_action: redact
+
+  # Internal engineering tooling: secrets still blocked, contact info allowed.
+  internal-tools:
+    pii_action: allow
+    block_pii_entities: [AWS_ACCESS_KEY, API_KEY]
+    injection_threshold: 0.7
+    output_pii_action: allow

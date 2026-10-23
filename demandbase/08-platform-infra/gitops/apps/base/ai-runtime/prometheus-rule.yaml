@@ -1,0 +1,103 @@
+# GENERATED from 05-llm-observability/prometheus/rules/slo-alerts.yml - do not edit.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: ai-runtime-slos
+  labels:
+    app: llm-gateway
+spec:
+  groups:
+  - name: airt-slo-recording
+    interval: 30s
+    rules:
+    - record: airt:llm_requests:rate5m
+      expr: sum by (model) (rate(airt_llm_requests_total[5m]))
+    - record: airt:llm_error_ratio:rate5m
+      expr: sum(rate(airt_llm_requests_total{status="error"}[5m])) / clamp_min(sum(rate(airt_llm_requests_total[5m])), 1e-9)
+    - record: airt:llm_error_ratio:rate30m
+      expr: sum(rate(airt_llm_requests_total{status="error"}[30m])) / clamp_min(sum(rate(airt_llm_requests_total[30m])), 1e-9)
+    - record: airt:llm_error_ratio:rate1h
+      expr: sum(rate(airt_llm_requests_total{status="error"}[1h])) / clamp_min(sum(rate(airt_llm_requests_total[1h])), 1e-9)
+    - record: airt:llm_error_ratio:rate6h
+      expr: sum(rate(airt_llm_requests_total{status="error"}[6h])) / clamp_min(sum(rate(airt_llm_requests_total[6h])), 1e-9)
+    - record: airt:llm_slow_ratio:rate1h
+      expr: "1 - (\n  sum(rate(airt_llm_request_duration_seconds_bucket{model=\"chat-small\",status=\"success\",le=\"8.0\"}[1h]))\n  / clamp_min(sum(rate(airt_llm_request_duration_seconds_count{model=\"\
+        chat-small\",status=\"success\"}[1h])), 1e-9)\n)\n"
+    - record: airt:llm_cost_usd:rate1h_by_team
+      expr: sum by (team) (rate(airt_llm_cost_usd_total[1h])) * 3600
+  - name: airt-slo-alerts
+    rules:
+    - alert: LLMGatewayErrorBudgetFastBurn
+      expr: airt:llm_error_ratio:rate1h > (14.4 * 0.005) and airt:llm_error_ratio:rate5m > (14.4 * 0.005)
+      for: 2m
+      labels:
+        severity: page
+        owner: ai-runtime
+      annotations:
+        summary: LLM gateway burning error budget 14x (2% of 28d budget per hour)
+        runbook_url: 09-sre/runbooks/gateway-errors.md
+    - alert: LLMGatewayErrorBudgetSlowBurn
+      expr: airt:llm_error_ratio:rate6h > (6 * 0.005) and airt:llm_error_ratio:rate30m > (6 * 0.005)
+      for: 15m
+      labels:
+        severity: ticket
+        owner: ai-runtime
+      annotations:
+        summary: LLM gateway burning error budget 6x over 6h
+        runbook_url: 09-sre/runbooks/gateway-errors.md
+    - alert: LLMGatewayLatencySLO
+      expr: airt:llm_slow_ratio:rate1h > 0.05
+      for: 15m
+      labels:
+        severity: ticket
+        owner: ai-runtime
+      annotations:
+        summary: More than 5% of chat-small requests slower than 8s for 15m
+        runbook_url: 09-sre/runbooks/gateway-latency.md
+    - alert: LLMGatewayDown
+      expr: up{job="llm-gateway"} == 0
+      for: 2m
+      labels:
+        severity: page
+        owner: ai-runtime
+      annotations:
+        summary: 'Gateway metrics endpoint unreachable: every AI feature is likely down'
+        runbook_url: 09-sre/runbooks/gateway-errors.md
+    - alert: LLMPrimaryProviderDegraded
+      expr: "sum(rate(airt_llm_served_by_total{model=\"chat-small\",backend=\"secondary\"}[10m]))\n  / clamp_min(sum(rate(airt_llm_served_by_total{model=\"chat-small\"}[10m])), 1e-9) > 0.5\n"
+      for: 10m
+      labels:
+        severity: ticket
+        owner: ai-runtime
+      annotations:
+        summary: Most chat-small traffic is failing over to the secondary provider
+        runbook_url: 09-sre/runbooks/provider-failover.md
+    - alert: LLMDegradedModelServing
+      expr: sum(rate(airt_llm_requests_total{model="chat-tiny",status="success"}[10m])) > 0 and on() sum(rate(airt_llm_requests_total{model="chat-small",status="error"}[10m])) > 0
+      for: 5m
+      labels:
+        severity: ticket
+        owner: ai-runtime
+      annotations:
+        summary: chat-small is failing and traffic is being served by the chat-tiny fallback (quality degraded)
+        runbook_url: 09-sre/runbooks/provider-failover.md
+  - name: airt-cost-alerts
+    rules:
+    - alert: LLMSpendSpike
+      expr: "airt:llm_cost_usd:rate1h_by_team\n  > 3 * (sum by (team) (rate(airt_llm_cost_usd_total[7d])) * 3600)\nand airt:llm_cost_usd:rate1h_by_team > 0.05\n"
+      for: 30m
+      labels:
+        severity: ticket
+        owner: ai-runtime
+      annotations:
+        summary: '{{ $labels.team }} LLM spend is 3x its weekly baseline'
+        runbook_url: 09-sre/runbooks/cost-spike.md
+    - alert: GuardrailBlockSpike
+      expr: sum by (team, reason) (rate(airt_guardrail_blocks_total[15m])) * 60 > 5
+      for: 10m
+      labels:
+        severity: ticket
+        owner: ai-runtime
+      annotations:
+        summary: '{{ $labels.team }}: >5 guardrail blocks/min ({{ $labels.reason }}) - attack or bad policy rollout'
+        runbook_url: 09-sre/runbooks/guardrail-spike.md

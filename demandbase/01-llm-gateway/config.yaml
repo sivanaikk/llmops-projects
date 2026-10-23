@@ -1,0 +1,122 @@
+# LiteLLM proxy: the single front door for every model call.
+#
+# Two Ollama containers stand in for two independent model providers so that
+# routing, failover and quotas can be exercised locally on a laptop CPU:
+#   ollama-primary   -> "provider A"
+#   ollama-secondary -> "provider B"
+# Swap either api_base for a real provider (openai/gpt-4o-mini,
+# bedrock/anthropic..., vertex_ai/...) without changing any caller.
+
+model_list:
+  # ---- chat-small: the default chat model for product features ----------
+  - model_name: chat-small
+    litellm_params:
+      model: ollama_chat/qwen2.5:0.5b
+      api_base: http://ollama-primary:11434
+      order: 1             # preferred deployment
+      rpm: 120             # provider quota for this deployment
+      tpm: 200000
+      timeout: 60
+      stream_timeout: 30
+    model_info:
+      id: chat-small-primary
+      input_cost_per_token: 0.0000001   # shadow price, see 04-cost-control/costwatch/pricing.py
+      output_cost_per_token: 0.0000004
+
+  - model_name: chat-small
+    litellm_params:
+      model: ollama_chat/qwen2.5:0.5b
+      api_base: http://ollama-secondary:11434
+      order: 2             # only used when order-1 is cooling down / over quota
+      rpm: 60
+      tpm: 100000
+      timeout: 60
+    model_info:
+      id: chat-small-secondary
+      input_cost_per_token: 0.0000001
+      output_cost_per_token: 0.0000004
+
+  # ---- chat-tiny: degraded-mode model, cheapest and fastest -------------
+  - model_name: chat-tiny
+    litellm_params:
+      model: ollama_chat/smollm2:360m
+      api_base: http://ollama-secondary:11434
+      rpm: 240
+    model_info:
+      id: chat-tiny-secondary
+      input_cost_per_token: 0.00000005
+      output_cost_per_token: 0.0000002
+
+  # ---- judge: LLM-as-judge for the evals harness ------------------------
+  - model_name: judge
+    litellm_params:
+      model: ollama_chat/qwen2.5:1.5b
+      api_base: http://ollama-secondary:11434
+      rpm: 30
+    model_info:
+      id: judge-secondary
+      input_cost_per_token: 0.0000002
+      output_cost_per_token: 0.0000008
+
+  # ---- embed-small: embeddings for RAG + semantic cache -----------------
+  - model_name: embed-small
+    litellm_params:
+      model: ollama/all-minilm
+      api_base: http://ollama-primary:11434
+    model_info:
+      id: embed-small-primary
+      mode: embedding
+      input_cost_per_token: 0.00000002
+      output_cost_per_token: 0
+
+router_settings:
+  routing_strategy: simple-shuffle   # respects `order`, then weights
+  num_retries: 2
+  retry_after: 1
+  allowed_fails: 3                   # failures/minute before a deployment is cooled down
+  cooldown_time: 30
+  timeout: 90
+  # Whole-group fallbacks: if every chat-small deployment is down, degrade to chat-tiny.
+  fallbacks:
+    - chat-small: [chat-tiny]
+  context_window_fallbacks:
+    - chat-tiny: [chat-small]
+  # Shared state across gateway replicas (cooldowns, rpm/tpm counters).
+  redis_host: os.environ/REDIS_HOST
+  redis_port: os.environ/REDIS_PORT
+
+litellm_settings:
+  drop_params: true
+  request_timeout: 90
+  # Exact-match response cache shared by all replicas. Semantic caching is
+  # tenant-scoped and lives in 03-semantic-cache.
+  cache: true
+  cache_params:
+    type: redis
+    host: os.environ/REDIS_HOST
+    port: os.environ/REDIS_PORT
+    ttl: 600
+    supported_call_types: [acompletion, aembedding]
+  # Callbacks:
+  #   custom_callbacks.handler -> Prometheus metrics (05) + ClickHouse cost rows (04)
+  #   otel                     -> gateway spans, joined to the caller's traceparent
+  callbacks: ["custom_callbacks.handler", "otel"]
+  # Production: Datadog LLM Observability + APM instead of/in addition to otel.
+  # success_callback: ["datadog_llm_observability"]
+  # failure_callback: ["datadog_llm_observability"]
+
+guardrails:
+  - guardrail_name: airt-guardkit
+    litellm_params:
+      guardrail: custom_guardrail.GuardkitGuardrail
+      mode: [pre_call, post_call]
+      default_on: true
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL     # virtual keys, teams, budgets, spend logs
+  store_model_in_db: false                  # models are GitOps-managed: this file is the source of truth
+  disable_spend_logs: false
+  # Protect the gateway itself.
+  max_parallel_requests: 200
+  global_max_parallel_requests: 400

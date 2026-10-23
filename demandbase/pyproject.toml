@@ -1,0 +1,38 @@
+[project]
+name = "demandbase-ai-runtime-lab"
+version = "0.1.0"
+description = "AI Runtime Services lab: LLM gateway, guardrails, caching, cost control, observability and evals on small local models"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+# Each numbered folder is its own project; put their packages on the path so
+# `pytest` from this directory runs every project's tests.
+pythonpath = [
+  "02-guardrails",
+  "03-semantic-cache",
+  "04-cost-control",
+  "05-llm-observability",
+  "06-evals-harness",
+  "07-account-rag-app",
+]
+testpaths = [
+  "02-guardrails/tests",
+  "03-semantic-cache/tests",
+  "04-cost-control/tests",
+  "05-llm-observability/tests",
+  "06-evals-harness/tests",
+  "07-account-rag-app/tests",
+]
+addopts = "-q --import-mode=importlib"
+
+[tool.ruff]
+line-length = 130
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+# E501: long regexes/f-strings read better unwrapped; B905: zip over equal-length vectors by construction.
+ignore = ["E731", "E501", "B905", "UP042"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["guardkit", "semcache", "costwatch", "llmobs", "evalkit", "account_rag"]
