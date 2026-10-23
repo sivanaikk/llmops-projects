@@ -1,0 +1,60 @@
+# Agent-specific alerts: the failure modes that don't show up as errors.
+# SLO burn alerts are generated separately: rules/slo-generated.yml (budgetgate rules).
+groups:
+  - name: agent-runtime
+    rules:
+      - alert: AgentBudgetStopsHigh
+        # Runs stopped by a guardrail (steps/cost/tokens/loop). Not an SLO breach,
+        # but a sign the agent is struggling: often a model or prompt regression.
+        expr: |
+          sum(rate(agent_runs_total{outcome=~"budget_.*|loop_detected"}[15m]))
+            / clamp_min(sum(rate(agent_runs_total[15m])), 1e-9) > 0.10
+        for: 15m
+        labels: {severity: ticket, owner: sre}
+        annotations:
+          summary: "More than 10% of agent runs end on a budget or loop stop"
+          runbook_url: "08-sre-operations/runbooks/agent-runaway.md"
+
+      - alert: AgentSpendOverDailyBudget
+        # Projected 24h spend from the last hour's rate exceeds the daily budget ($5).
+        expr: sum(rate(agent_cost_usd_total[1h])) * 86400 > 5
+        for: 30m
+        labels: {severity: ticket, owner: sre}
+        annotations:
+          summary: "Agent spend is on pace to exceed its daily budget ({{ $value | printf \"$%.2f\" }}/day)"
+          runbook_url: "08-sre-operations/runbooks/agent-runaway.md"
+
+      - alert: AgentToolCircuitOpen
+        expr: sum by (tool) (rate(agent_tool_calls_total{result="circuit_open"}[5m])) > 0
+        for: 5m
+        labels: {severity: ticket, owner: sre}
+        annotations:
+          summary: "Circuit breaker open for tool {{ $labels.tool }}: its dependency is failing"
+          runbook_url: "08-sre-operations/runbooks/tool-dependency-down.md"
+
+      - alert: AgentInvalidOutputRateHigh
+        expr: |
+          sum(rate(agent_invalid_outputs_total[15m]))
+            / clamp_min(sum(rate(agent_run_steps_count[15m])), 1e-9) > 0.05
+        for: 15m
+        labels: {severity: ticket, owner: sre}
+        annotations:
+          summary: "Model is breaking the action protocol on >5% of runs (model/prompt change?)"
+          runbook_url: "08-sre-operations/runbooks/agent-runaway.md"
+
+      - alert: AgentLatencyHigh
+        expr: histogram_quantile(0.95, sum by (le) (rate(agent_run_duration_seconds_bucket[10m]))) > 30
+        for: 10m
+        labels: {severity: ticket, owner: sre}
+        annotations:
+          summary: "Agent p95 run time above 30s"
+          runbook_url: "08-sre-operations/runbooks/llm-provider-degraded.md"
+
+      - alert: AIDriftOrCostAnomaly
+        # Written by 03-drift-cost-sentinel (textfile collector or Pushgateway).
+        expr: max by (detector, signal) (sentinel_signal_severity) >= 3
+        for: 0m
+        labels: {severity: ticket, owner: sre}
+        annotations:
+          summary: "Sentinel: critical {{ $labels.detector }} on {{ $labels.signal }}"
+          runbook_url: "08-sre-operations/runbooks/drift-or-cost-anomaly.md"

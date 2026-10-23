@@ -1,0 +1,82 @@
+# Applied AI SRE lab: the agent, its small-model backend, a fault-injection
+# proxy in between, and the observability + experiment-tracking stack.
+#
+#   make up        # build + start, pull qwen2.5:0.5b and qwen2.5:1.5b (~1.4 GB)
+#   make ask Q="Is payments-api healthy?"
+#   make load      # k6 steady + spike against the agent
+#   make chaos     # Toxiproxy experiments with steady-state hypotheses
+#
+# Traffic path: agent -> toxiproxy:21434 -> ollama:11434, so every chaos
+# experiment hits the real model path.
+
+services:
+  ollama:
+    image: ollama/ollama:0.12.6
+    volumes: [ollama:/root/.ollama]
+    ports: ["11434:11434"]   # evals and the CLI talk to the model directly
+    environment: {OLLAMA_KEEP_ALIVE: 30m, OLLAMA_NUM_PARALLEL: "4"}
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      retries: 12
+
+  model-puller:
+    image: ollama/ollama:0.12.6
+    depends_on: {ollama: {condition: service_healthy}}
+    environment: {OLLAMA_HOST: "http://ollama:11434"}
+    entrypoint: ["/bin/sh", "-c", "ollama pull qwen2.5:1.5b && ollama pull qwen2.5:0.5b"]
+    restart: "no"
+
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.9.0
+    command: ["-host=0.0.0.0", "-config=/config/toxiproxy.json"]
+    volumes: ["./05-resilience/toxiproxy.json:/config/toxiproxy.json:ro"]
+    ports: ["8474:8474"]
+    depends_on: [ollama]
+
+  agent:
+    build: ./01-agent-runtime
+    ports: ["8000:8000"]
+    environment:
+      LLM_BASE_URL: http://toxiproxy:21434/v1
+      AGENT_MODEL: ${AGENT_MODEL:-qwen2.5:1.5b}
+      AGENT_RUN_LOG: /runs/runs.jsonl
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_SERVICE_NAME: agent-runtime
+    volumes: [runs:/runs]
+    depends_on: [toxiproxy]
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    ports: ["9090:9090"]
+    volumes: ["./observability/prometheus:/etc/prometheus:ro"]
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--web.enable-lifecycle"]
+
+  pushgateway:
+    image: prom/pushgateway:v1.10.0
+    ports: ["9091:9091"]
+
+  grafana:
+    image: grafana/grafana:11.2.2
+    ports: ["3000:3000"]
+    environment: {GF_AUTH_ANONYMOUS_ENABLED: "true", GF_AUTH_ANONYMOUS_ORG_ROLE: Admin}
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    ports: ["16686:16686"]
+    environment: {COLLECTOR_OTLP_ENABLED: "true"}
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.17.2
+    ports: ["5000:5000"]
+    command: ["mlflow", "server", "--host", "0.0.0.0", "--backend-store-uri", "sqlite:///mlflow/mlflow.db",
+              "--default-artifact-root", "/mlflow/artifacts"]
+    volumes: [mlflow:/mlflow]
+
+volumes:
+  ollama:
+  runs:
+  mlflow:

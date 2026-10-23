@@ -1,0 +1,4 @@
+# Latency experiment: cap steps at 3. Multi-hop tasks are expected to suffer.
+name: candidate-tight-steps
+model: qwen2.5:1.5b
+max_steps: 3

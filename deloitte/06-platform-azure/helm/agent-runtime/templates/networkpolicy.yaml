@@ -1,0 +1,24 @@
+{{- if .Values.networkPolicy.enabled }}
+# The agent executes model-chosen actions, so its egress is an allowlist:
+# DNS, the model backend and telemetry. Nothing else, including the internet.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: agent-runtime-egress
+  labels: {{- include "agent.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: {{- include "agent.selector" . | nindent 6 }}
+  policyTypes: [Egress]
+  egress:
+    - ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+    - to:
+        - podSelector: {matchLabels: {app.kubernetes.io/name: ollama}}
+      ports: [{protocol: TCP, port: 11434}]
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: observability}}
+      ports: [{protocol: TCP, port: 4318}]
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: llm-gateway}}
+      ports: [{protocol: TCP, port: 4000}]
+{{- end }}

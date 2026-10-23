@@ -1,0 +1,54 @@
+image:
+  repository: acraiplatdev.azurecr.io/agent-runtime
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 3
+resources:
+  requests: {cpu: 250m, memory: 256Mi}
+  limits: {memory: 512Mi}
+
+agent:
+  model: qwen2.5:1.5b
+  maxSteps: 6
+  maxCostUsd: 0.01
+  deadlineSeconds: 60
+  # Point at the LLM gateway in production (demandbase/01-llm-gateway); the
+  # in-cluster Ollama backend below is the small-model default.
+  llmBaseUrl: http://ollama:11434/v1
+
+otel:
+  endpoint: ""   # e.g. http://otel-collector.observability:4318
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 12
+  targetCPUUtilizationPercentage: 60
+
+pdb:
+  minAvailable: 2
+
+networkPolicy:
+  enabled: true
+
+serviceMonitor:
+  enabled: true
+
+ollama:
+  enabled: true
+  image: ollama/ollama:0.12.6
+  models: [qwen2.5:1.5b, qwen2.5:0.5b]
+  resources:
+    requests: {cpu: "4", memory: 4Gi}
+    limits: {memory: 6Gi}
+  nodeSelector: {workload: ai}
+
+# Error-budget release gate (02-error-budget-gate). Runs before every sync;
+# a denied gate fails the sync, so nothing is rolled out.
+budgetGate:
+  enabled: true
+  image: acraiplatdev.azurecr.io/budgetgate:0.1.0
+  prometheusUrl: http://prometheus-operated.monitoring:9090
+  changeType: feature       # set to fix + overrideTicket for a reliability fix while blocked
+  overrideTicket: ""

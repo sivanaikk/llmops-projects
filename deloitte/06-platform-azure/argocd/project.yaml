@@ -1,0 +1,37 @@
+# Segregation of duties in Argo CD:
+#  - product engineers (ai-platform-devs) can sync dev, can only *view* prod
+#  - SRE (sre-oncall) syncs prod; prod syncs are blocked in the weekly change freeze window
+#  - only this repo and only the agent-runtime namespaces are allowed destinations
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: ai-platform
+  namespace: argocd
+spec:
+  description: Applied AI workloads (agent runtime + model backends)
+  sourceRepos:
+    - https://github.com/sivanaikk/llmops-projects.git
+  destinations:
+    - {server: https://kubernetes.default.svc, namespace: agent-runtime-dev}
+    - {server: https://kubernetes.default.svc, namespace: agent-runtime}
+  clusterResourceWhitelist: []          # no cluster-scoped resources from app teams
+  namespaceResourceBlacklist:
+    - {group: "", kind: ResourceQuota}  # quotas are set by the platform, not the app
+  orphanedResources:
+    warn: true                          # drift: report resources nobody declared
+  syncWindows:
+    - kind: deny
+      schedule: "0 12 * * 5"            # Fridays from 12:00 for 60h: no prod deploys going into the weekend
+      duration: 60h
+      applications: [agent-runtime-prod]
+      manualSync: true                  # incident fixes can still be synced by SRE
+  roles:
+    - name: developers
+      groups: [ai-platform-devs]
+      policies:
+        - p, proj:ai-platform:developers, applications, get, ai-platform/*, allow
+        - p, proj:ai-platform:developers, applications, sync, ai-platform/agent-runtime-dev, allow
+    - name: sre
+      groups: [sre-oncall]
+      policies:
+        - p, proj:ai-platform:sre, applications, *, ai-platform/*, allow

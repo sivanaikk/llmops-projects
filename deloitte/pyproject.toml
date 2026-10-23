@@ -1,0 +1,21 @@
+[project]
+name = "deloitte-applied-ai-sre-lab"
+version = "0.1.0"
+description = "Applied AI SRE lab: reliable agent runtime, error-budget release gates, drift and cost anomaly detection, agent evals, resilience testing"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+pythonpath = ["01-agent-runtime", "03-drift-cost-sentinel", "04-agent-evals", "05-resilience"]
+testpaths = ["tests", "01-agent-runtime/tests", "03-drift-cost-sentinel/tests", "04-agent-evals/tests", "05-resilience/tests"]
+addopts = "-q --import-mode=importlib"
+
+[tool.ruff]
+line-length = 130
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["E731", "E501", "B905"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["agentops", "sentinel", "agentevals", "resilience"]

@@ -1,0 +1,10 @@
+{
+  "_note": "Fictional service catalogue for the incident-desk agent. Not real systems.",
+  "services": {
+    "payments-api": {"owner": "team-payments", "tier": 1, "status": "degraded", "slo_availability": 0.999, "error_budget_remaining": 0.18, "p95_latency_ms": 840, "open_incident": "INC-1042", "last_deploy": "2026-10-22T09:14:00Z"},
+    "search-api": {"owner": "team-discovery", "tier": 2, "status": "healthy", "slo_availability": 0.995, "error_budget_remaining": 0.71, "p95_latency_ms": 210, "open_incident": null, "last_deploy": "2026-10-20T16:02:00Z"},
+    "llm-gateway": {"owner": "team-ai-platform", "tier": 1, "status": "healthy", "slo_availability": 0.995, "error_budget_remaining": 0.42, "p95_latency_ms": 1900, "open_incident": null, "last_deploy": "2026-10-21T11:30:00Z"},
+    "doc-ingest": {"owner": "team-ai-platform", "tier": 3, "status": "down", "slo_availability": 0.99, "error_budget_remaining": -0.05, "p95_latency_ms": null, "open_incident": "INC-1045", "last_deploy": "2026-10-22T18:40:00Z"},
+    "auth-service": {"owner": "team-identity", "tier": 1, "status": "healthy", "slo_availability": 0.9995, "error_budget_remaining": 0.93, "p95_latency_ms": 45, "open_incident": null, "last_deploy": "2026-10-15T08:00:00Z"}
+  }
+}

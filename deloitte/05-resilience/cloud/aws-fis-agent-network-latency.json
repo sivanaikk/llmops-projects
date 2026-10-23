@@ -1,0 +1,34 @@
+{
+  "description": "Add 3s network latency to agent-runtime pods on EKS for 10 minutes (cloud version of experiments/llm-latency.yaml). Stops automatically if the SLO fast-burn alarm fires.",
+  "targets": {
+    "AgentPods": {
+      "resourceType": "aws:eks:pod",
+      "parameters": {
+        "clusterIdentifier": "arn:aws:eks:ap-south-1:111122223333:cluster/ai-platform",
+        "namespace": "agent-runtime",
+        "selectorType": "labelSelector",
+        "selectorValue": "app.kubernetes.io/name=agent-runtime",
+        "targetContainerName": "agent"
+      },
+      "selectionMode": "PERCENT(50)"
+    }
+  },
+  "actions": {
+    "InjectLatency": {
+      "actionId": "aws:eks:pod-network-latency",
+      "parameters": {
+        "kubernetesServiceAccount": "fis-experiment",
+        "duration": "PT10M",
+        "delayMilliseconds": "3000",
+        "jitterMilliseconds": "500",
+        "sources": "0.0.0.0/0"
+      },
+      "targets": {"Pods": "AgentPods"}
+    }
+  },
+  "stopConditions": [
+    {"source": "aws:cloudwatch:alarm", "value": "arn:aws:cloudwatch:ap-south-1:111122223333:alarm:agent-runtime-slo-fast-burn"}
+  ],
+  "roleArn": "arn:aws:iam::111122223333:role/fis-agent-runtime",
+  "tags": {"owner": "sre", "experiment": "llm-latency"}
+}

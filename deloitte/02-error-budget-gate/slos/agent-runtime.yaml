@@ -1,0 +1,18 @@
+# Co-defined by the incident-desk product team and SRE (see 08-sre-operations/production-readiness.md).
+service: agent-runtime
+name: availability
+owner: team-ai-platform
+description: >
+  Share of agent runs that end without a platform failure. Budget/loop stops
+  are excluded on purpose: they are the agent working as designed, and have
+  their own alert (AgentBudgetStopsHigh).
+objective: 0.99
+window: 28d
+sli:
+  errors: agent_runs_total{outcome=~"llm_unavailable|deadline|invalid_output"}
+  total: agent_runs_total
+gate:
+  min_budget_remaining: 0.10   # below 10% only reliability fixes ship
+  max_fast_burn: 14.4
+  max_slow_burn: 6
+  on_error: closed             # tier-1: no SLO data, no release

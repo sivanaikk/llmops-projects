@@ -1,0 +1,3 @@
+apiVersion: 1
+providers:
+  - {name: applied-ai-sre, folder: Applied AI SRE, type: file, options: {path: /var/lib/grafana/dashboards}}

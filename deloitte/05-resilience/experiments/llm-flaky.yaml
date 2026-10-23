@@ -1,0 +1,10 @@
+name: llm-flaky
+description: 30% of model connections are reset mid-response.
+probe_requests: 10
+steady_state: {min_success_rate: 0.8, max_p95_s: 30}
+fault:
+  kind: toxic
+  proxy: ollama
+  toxic: {type: reset_peer, attributes: {timeout: 100}, toxicity: 0.3, stream: downstream}
+# Hypothesis: retries with backoff absorb transient resets.
+hypothesis: {min_success_rate: 0.7, max_p95_s: 45}

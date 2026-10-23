@@ -1,0 +1,29 @@
+# Drift prevention: selfHeal reverts any manual kubectl change back to git.
+# Admission: the budget-gate PreSync hook must pass before anything rolls out.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: agent-runtime-prod
+  namespace: argocd
+  annotations:
+    notifications.argoproj.io/subscribe.on-sync-failed.teams: sre-oncall
+spec:
+  project: ai-platform
+  source:
+    repoURL: https://github.com/sivanaikk/llmops-projects.git
+    targetRevision: main
+    path: deloitte/06-platform-azure/helm/agent-runtime
+    helm:
+      valuesObject:
+        budgetGate:
+          enabled: true
+          changeType: feature
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: agent-runtime
+  syncPolicy:
+    automated: {prune: false, selfHeal: true}   # never auto-delete in prod; a human confirms prunes
+    syncOptions: [CreateNamespace=true, PruneLast=true]
+    retry:
+      limit: 2
+      backoff: {duration: 30s, factor: 2, maxDuration: 5m}

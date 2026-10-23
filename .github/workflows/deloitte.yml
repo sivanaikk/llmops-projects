@@ -1,0 +1,174 @@
+# CI/CD for llmops-projects/deloitte. DevSecOps shape:
+#   test (python, go) -> validate (alerts, k8s, IaC, load test) -> security (secrets, vulns, IaC misconfig, SBOM, SonarQube)
+#   -> agent evals on a real small model (scheduled / manual) -> production gate (error budget + human approval)
+name: deloitte-applied-ai-sre
+
+on:
+  push:
+    paths: ["deloitte/**", ".github/workflows/deloitte.yml"]
+  pull_request:
+    paths: ["deloitte/**", ".github/workflows/deloitte.yml"]
+  schedule:
+    - cron: "17 3 * * *"   # nightly: evals on the real model + Terraform drift check
+  workflow_dispatch:
+    inputs:
+      run_evals:
+        description: Run agent evals against a real small model (Ollama on the runner)
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: deloitte
+
+concurrency:
+  group: deloitte-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12", cache: pip, cache-dependency-path: deloitte/requirements-dev.txt}
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check .
+      - run: pytest --junitxml=pytest.xml
+        env: {MLFLOW_DISABLE_AGENT_HINT: "1"}
+
+  go:
+    runs-on: ubuntu-latest
+    defaults: {run: {working-directory: deloitte/02-error-budget-gate}}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: {go-version: "1.24", cache-dependency-path: deloitte/02-error-budget-gate/go.sum}
+      - run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+      - run: go vet ./...
+      - run: go test -race ./...
+      - name: Generated SLO rules are up to date
+        run: |
+          go run ./cmd/budgetgate rules --slos slos --out /tmp/slo.yml
+          diff -u ../observability/prometheus/rules/slo-generated.yml /tmp/slo.yml
+
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prometheus rules + alert unit tests
+        run: |
+          docker run --rm -v "$PWD/observability/prometheus/rules:/r" -w /r --entrypoint promtool prom/prometheus:v2.54.1 check rules agent-alerts.yml slo-generated.yml
+          docker run --rm -v "$PWD/observability/prometheus/rules:/r" -w /r --entrypoint promtool prom/prometheus:v2.54.1 test rules alerts.test.yml
+      - uses: azure/setup-helm@v4
+        with: {version: v3.16.2}
+      - name: Helm chart + Argo CD manifests
+        run: |
+          curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz -C /usr/local/bin
+          helm lint 06-platform-azure/helm/agent-runtime
+          helm template rel 06-platform-azure/helm/agent-runtime | kubeconform -strict -summary -ignore-missing-schemas
+          kubeconform -strict -summary -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            06-platform-azure/argocd/*.yaml
+      - uses: hashicorp/setup-terraform@v3
+        with: {terraform_version: 1.9.8}
+      - name: Terraform fmt + validate
+        working-directory: deloitte/06-platform-azure/terraform
+        run: terraform fmt -check -recursive && terraform init -backend=false -input=false && terraform validate
+      - uses: grafana/setup-k6-action@v1
+      - name: k6 script parses
+        run: k6 inspect 05-resilience/k6/agent-load.js > /dev/null
+
+  security:
+    runs-on: ubuntu-latest
+    permissions: {contents: read}
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - name: Secret scan (gitleaks)
+        run: |
+          curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz | tar xz -C /usr/local/bin gitleaks
+          gitleaks dir . --redact --exit-code 1
+      - name: Vulnerabilities (Trivy, fail on fixable CRITICAL)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: deloitte
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: IaC misconfiguration (Trivy config, report only)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: config
+          scan-ref: deloitte
+          severity: HIGH,CRITICAL
+          exit-code: "0"
+      - name: SBOM (SPDX)
+        uses: anchore/sbom-action@v0
+        with: {path: deloitte, format: spdx-json, artifact-name: deloitte-sbom.spdx.json}
+      - name: SonarQube scan (runs when SONAR_TOKEN is configured)
+        if: env.SONAR_TOKEN != ''
+        uses: SonarSource/sonarqube-scan-action@v4
+        with: {projectBaseDir: deloitte}
+        env: {SONAR_HOST_URL: "${{ vars.SONAR_HOST_URL }}"}
+
+  agent-evals:
+    # Real model, real agent: qwen2.5:1.5b on the CPU runner, via Ollama.
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && inputs.run_evals) ||
+      (github.event_name == 'push' && contains(github.event.head_commit.message, '[run-evals]'))
+    needs: [python]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12", cache: pip, cache-dependency-path: deloitte/requirements-dev.txt}
+      - run: pip install -r requirements-dev.txt
+      - name: Start Ollama with small models
+        run: |
+          docker run -d --name ollama -p 11434:11434 ollama/ollama:0.12.6
+          for i in $(seq 1 30); do curl -sf localhost:11434/api/tags && break; sleep 2; done
+          docker exec ollama ollama pull qwen2.5:1.5b
+          docker exec ollama ollama pull qwen2.5:0.5b
+      - name: Evals (baseline vs smaller model)
+        env:
+          PYTHONPATH: 01-agent-runtime:04-agent-evals
+          LLM_BASE_URL: http://localhost:11434/v1
+          MLFLOW_DISABLE_AGENT_HINT: "1"
+        run: |
+          python -m agentevals run 04-agent-evals/variants/baseline.yaml --trials 2 --concurrency 2
+          python -m agentevals run 04-agent-evals/variants/candidate-0.5b.yaml --trials 2 --concurrency 2
+          python -m agentevals compare baseline candidate-0.5b --report eval-report.md || echo "::warning::candidate-0.5b did not pass the promotion gate"
+          cat eval-report.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: agent-eval-results, path: "deloitte/04-agent-evals/results/\ndeloitte/eval-report.md"}
+
+  production-gate:
+    # Segregation of duties: the `production` environment requires an approver
+    # other than the author (configure required reviewers in repo settings),
+    # and the error-budget gate must pass. Rollbacks skip the budget check.
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    needs: [python, go, validate, security]
+    runs-on: ubuntu-latest
+    environment: production
+    defaults: {run: {working-directory: deloitte/02-error-budget-gate}}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: {go-version: "1.24", cache-dependency-path: deloitte/02-error-budget-gate/go.sum}
+      - name: Error-budget release gate
+        env:
+          PROMETHEUS_URL: ${{ secrets.PROMETHEUS_URL }}
+          PROMETHEUS_BEARER_TOKEN: ${{ secrets.PROMETHEUS_BEARER_TOKEN }}
+        run: |
+          if [ -z "$PROMETHEUS_URL" ]; then echo "::notice::PROMETHEUS_URL not configured; lab mode, gate skipped"; exit 0; fi
+          go run ./cmd/budgetgate check --slo slos/agent-runtime.yaml --change-type feature

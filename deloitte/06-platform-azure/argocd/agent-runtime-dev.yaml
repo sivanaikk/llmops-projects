@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: agent-runtime-dev
+  namespace: argocd
+spec:
+  project: ai-platform
+  source:
+    repoURL: https://github.com/sivanaikk/llmops-projects.git
+    targetRevision: main
+    path: deloitte/06-platform-azure/helm/agent-runtime
+    helm:
+      valuesObject:
+        replicaCount: 1
+        autoscaling: {minReplicas: 1, maxReplicas: 3}
+        pdb: {minAvailable: 0}
+        budgetGate: {enabled: false}   # dev deploys are never gated
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: agent-runtime-dev
+  syncPolicy:
+    automated: {prune: true, selfHeal: true}
+    syncOptions: [CreateNamespace=true]

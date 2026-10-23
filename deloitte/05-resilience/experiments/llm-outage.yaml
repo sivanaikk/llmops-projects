@@ -1,0 +1,9 @@
+name: llm-outage
+description: The model backend is unreachable (provider outage / network partition).
+probe_requests: 6
+steady_state: {min_success_rate: 0.8, max_p95_s: 30}
+fault: {kind: outage, proxy: ollama}
+# Hypothesis: the agent FAILS FAST with a clean outcome instead of hanging,
+# and recovers by itself once the link is back.
+hypothesis: {max_p95_s: 10, allowed_outcomes: [llm_unavailable]}
+recovery_wait_s: 10

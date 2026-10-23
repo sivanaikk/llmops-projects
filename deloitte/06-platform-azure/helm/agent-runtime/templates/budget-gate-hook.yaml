@@ -1,0 +1,30 @@
+{{- if .Values.budgetGate.enabled }}
+# Production admission: Argo CD runs this before syncing. Exit 1 (budget
+# exhausted / burning fast) fails the sync, and nothing is rolled out.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: budget-gate-{{ .Values.image.tag | replace "." "-" }}
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 120
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: budgetgate
+          image: {{ .Values.budgetGate.image }}
+          args:
+            - check
+            - --slo=/slos/agent-runtime.yaml
+            - --prometheus={{ .Values.budgetGate.prometheusUrl }}
+            - --change-type={{ .Values.budgetGate.changeType }}
+            {{- with .Values.budgetGate.overrideTicket }}
+            - --override-ticket={{ . }}
+            {{- end }}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+{{- end }}

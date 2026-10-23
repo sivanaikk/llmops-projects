@@ -1,0 +1,3 @@
+[
+  {"name": "ollama", "listen": "0.0.0.0:21434", "upstream": "ollama:11434", "enabled": true}
+]

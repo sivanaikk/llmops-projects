@@ -1,0 +1,12 @@
+service: llm-gateway
+name: availability
+owner: team-ai-platform
+description: Gateway requests that did not fail after retries and fallbacks (see demandbase/01-llm-gateway).
+objective: 0.995
+window: 28d
+sli:
+  errors: airt_llm_requests_total{status="error"}
+  total: airt_llm_requests_total
+gate:
+  min_budget_remaining: 0.0
+  on_error: closed

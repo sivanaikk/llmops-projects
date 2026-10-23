@@ -1,0 +1,12 @@
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+04-agent-evals/results/
+mlruns/
+*.db
+runs.jsonl
+summary.json
+.terraform/
+*.tfstate*
+eval-report.md
+chaos-report.md

@@ -1,0 +1,10 @@
+# Copy to .github/CODEOWNERS and require code-owner review on main.
+# Segregation of duties: the people who own production policy are not the
+# only reviewers of their own changes, and app teams can't change SLO/gate policy alone.
+
+/deloitte/02-error-budget-gate/slos/      @sre-team @product-owners
+/deloitte/02-error-budget-gate/           @sre-team
+/deloitte/06-platform-azure/              @platform-team @sre-team
+/deloitte/06-platform-azure/argocd/       @sre-team
+/.github/workflows/                       @platform-team @security-team
+/deloitte/01-agent-runtime/agentops/      @ai-platform-devs

@@ -1,0 +1,78 @@
+# promtool test rules observability/prometheus/rules/alerts.test.yml
+rule_files: [agent-alerts.yml, slo-generated.yml]
+evaluation_interval: 1m
+tests:
+  # 5% platform errors for an hour on a 99% SLO = 5x burn: SlowBurn territory, not Fast.
+  - interval: 1m
+    input_series:
+      - series: 'agent_runs_total{agent="incident-desk",outcome="success"}'
+        values: '0+95x420'
+      - series: 'agent_runs_total{agent="incident-desk",outcome="llm_unavailable"}'
+        values: '0+5x420'
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: SLOFastBurn
+        exp_alerts: []
+
+  # 30% errors: 30x burn -> page.
+  - interval: 1m
+    input_series:
+      - series: 'agent_runs_total{agent="incident-desk",outcome="success"}'
+        values: '0+70x90'
+      - series: 'agent_runs_total{agent="incident-desk",outcome="deadline"}'
+        values: '0+30x90'
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: SLOFastBurn
+        exp_alerts:
+          - exp_labels: {severity: page, service: agent-runtime, slo: availability}
+            exp_annotations:
+              summary: "agent-runtime burning its error budget 14x: 2% of the budget per hour"
+              runbook_url: "08-sre-operations/runbooks/slo-burn.md"
+              description: "SLO agent-runtime/availability (99% over 28d), owner team-ai-platform"
+
+  # Budget/loop stops at 20% -> ticket, and they do NOT burn the availability SLO.
+  - interval: 1m
+    input_series:
+      - series: 'agent_runs_total{agent="incident-desk",outcome="success"}'
+        values: '0+80x60'
+      - series: 'agent_runs_total{agent="incident-desk",outcome="loop_detected"}'
+        values: '0+20x60'
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: AgentBudgetStopsHigh
+        exp_alerts:
+          - exp_labels: {severity: ticket, owner: sre}
+            exp_annotations:
+              summary: "More than 10% of agent runs end on a budget or loop stop"
+              runbook_url: "08-sre-operations/runbooks/agent-runaway.md"
+      - eval_time: 40m
+        alertname: SLOFastBurn
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'agent_tool_calls_total{agent="incident-desk",tool="get_service_status",result="circuit_open"}'
+        values: '0+3x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: AgentToolCircuitOpen
+        exp_alerts:
+          - exp_labels: {severity: ticket, owner: sre, tool: get_service_status}
+            exp_annotations:
+              summary: "Circuit breaker open for tool get_service_status: its dependency is failing"
+              runbook_url: "08-sre-operations/runbooks/tool-dependency-down.md"
+
+  # $0.0002/s = $17.28/day projected -> over the $5/day budget.
+  - interval: 1m
+    input_series:
+      - series: 'agent_cost_usd_total{agent="incident-desk"}'
+        values: '0+0.012x120'
+    alert_rule_test:
+      - eval_time: 100m
+        alertname: AgentSpendOverDailyBudget
+        exp_alerts:
+          - exp_labels: {severity: ticket, owner: sre}
+            exp_annotations:
+              summary: "Agent spend is on pace to exceed its daily budget ($17.28/day)"
+              runbook_url: "08-sre-operations/runbooks/agent-runaway.md"

@@ -1,0 +1,10 @@
+name: llm-stall
+description: Connections to the model open but never respond (the worst case for timeouts).
+probe_requests: 4
+steady_state: {min_success_rate: 0.8, max_p95_s: 30}
+fault:
+  kind: toxic
+  proxy: ollama
+  toxic: {type: timeout, attributes: {timeout: 0}, stream: downstream}
+# Hypothesis: the run deadline (60s) bounds every request; no request hangs past it.
+hypothesis: {max_p95_s: 65, allowed_outcomes: [llm_unavailable, deadline]}

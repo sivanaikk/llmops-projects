@@ -1,0 +1,4 @@
+# Cost experiment: a 3x smaller model for the same agent.
+name: candidate-0.5b
+model: qwen2.5:0.5b
+max_steps: 6

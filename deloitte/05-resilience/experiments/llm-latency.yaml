@@ -1,0 +1,10 @@
+name: llm-latency
+description: The model backend gets 3s slower per call (overloaded provider).
+probe_requests: 6
+steady_state: {min_success_rate: 0.8, max_p95_s: 30}
+fault:
+  kind: toxic
+  proxy: ollama
+  toxic: {type: latency, attributes: {latency: 3000, jitter: 500}, stream: downstream}
+# Hypothesis: answers still arrive, just slower; nothing hits the 60s run deadline.
+hypothesis: {min_success_rate: 0.8, max_p95_s: 55, allowed_outcomes: [success, budget_steps]}
