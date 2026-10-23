@@ -16,6 +16,7 @@ OpenAI-compatible API, or through any gateway.
 | flaky model provider | retry with full-jitter backoff on **retryable** errors only (429/5xx/timeouts) | `llm.py`, `agent.py` |
 | flaky tool | per-tool timeout + circuit breaker; retries only for idempotent tools | `tools.py` |
 | model breaks the output format | JSON-mode + tolerant parser + corrective re-prompt, capped | `agent.py` |
+| model claims an action it can't take | change requests refused in code before the model; "has been deleted"-style claims replaced after it (`agent_guard_actions_total`) | `agent.py` |
 | model-chosen code execution | calculator via AST whitelist, never `eval`; args type-checked against the tool schema | `builtin_tools.py`, `tools.py` |
 
 Every run ends with an explicit **outcome** (`success`, `budget_steps`,
@@ -31,7 +32,7 @@ run log with sizes and outcomes only, no prompt text, which feeds the drift sent
 ```bash
 python -m agentops "Is payments-api healthy, and can we deploy to it today?"   # needs Ollama
 uvicorn agentops.server:app --port 8000      # /run, /metrics, /healthz, /readyz
-pytest 01-agent-runtime                      # 20 tests, scripted model, no Ollama needed
+pytest 01-agent-runtime                      # 26 tests, scripted model, no Ollama needed
 ```
 
 `/readyz` checks the model backend, so Kubernetes takes a pod with a broken

@@ -41,6 +41,8 @@ class Telemetry:
         self.llm_errors = Counter("agent_llm_errors", "Model call failures", ["agent", "retryable"], registry=r)
         self.invalid_outputs = Counter("agent_invalid_outputs", "Model replies that broke the action protocol",
                                        ["agent"], registry=r)
+        self.guard_actions = Counter("agent_guard_actions", "Code-level safety guard interventions",
+                                     ["agent", "action"], registry=r)
         self.run_log = Path(run_log) if run_log else None
         self._log_lock = threading.Lock()
 

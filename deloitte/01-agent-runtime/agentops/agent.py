@@ -45,15 +45,6 @@ SYSTEM = """You are an SRE incident-desk assistant. Use tools to look up facts; 
 Tools:
 {tools}
 
-Rules:
-- You can only look things up. If asked to change something (delete, deploy, restart, scale, roll back),
-  call no tools and reply with action "final" saying you can't perform changes and who should.
-- In the final answer, quote the exact values you found: status, incident IDs, owners,
-  error budget percentage, release_gate (open / restricted / frozen), runbook names.
-- For any arithmetic, call calculator with the complete expression, including unit conversions
-  (e.g. minutes in 28 days = 28*24*60).
-- If a lookup returns ERROR, say so in the answer instead of retrying the same call.
-
 Reply with exactly ONE JSON object and nothing else, either
 {{"thought": "<short reasoning>", "action": "<tool name>", "args": {{...}}}}
 or, when you have enough information,
@@ -135,6 +126,20 @@ def parse_action(text: str) -> dict:
     return obj
 
 
+# Small models follow long prompt rules poorly (measured: adding a "refuse change
+# requests" rule made qwen2.5:1.5b claim "The deployment has been deleted").
+# So the safety rule is enforced in code, before and after the model.
+CHANGE_REQUEST = re.compile(
+    r"^\s*(please\s+)?(delete|remove|deploy|redeploy|restart|reboot|scale|roll\s*back|rollback|kill|terminate|drop|"
+    r"disable|shut\s*down)\b", re.I)
+CLAIMED_CHANGE = re.compile(
+    r"\b(has|have|was|were)\s+(been\s+)?(deleted|removed|deployed|redeployed|restarted|rebooted|scaled|rolled\s*back|"
+    r"terminated|killed|dropped|disabled|shut\s*down)\b|\bI\s+(have\s+)?(deleted|removed|deployed|restarted|scaled|"
+    r"rolled\s*back|terminated|killed|disabled)\b", re.I)
+REFUSAL = ("I can only look things up; I can't make changes such as deleting, deploying, restarting or scaling services. "
+           "Ask the service owner or the on-call SRE to make that change through the normal release process.")
+
+
 def price(model: str, pt: int, ct: int) -> float:
     inp, out = PRICES.get(model, (0.0, 0.0))
     return (pt * inp + ct * out) / 1_000_000
@@ -178,6 +183,12 @@ class Agent:
         messages = [{"role": "system", "content": SYSTEM.format(tools=self.tools.describe())},
                     {"role": "user", "content": question}]
         seen: dict[str, int] = {}
+        side_effects = any(not t.idempotent for t in self.tools.tools.values())
+
+        if CHANGE_REQUEST.match(question) and not side_effects:
+            tm.guard_actions.labels(cfg.name, "refused_change_request").inc()
+            with tm.span("agent.run", **{"agent.name": cfg.name, "agent.guard": "refused_change_request"}):
+                return self._finish(r, "success", t0, REFUSAL)
 
         with tm.span("agent.run", **{"agent.name": cfg.name, "gen_ai.request.model": self.llm.model}) as run_span:
             while True:
@@ -219,8 +230,14 @@ class Agent:
                         continue
 
                     if action["action"] == "final":
+                        answer = action["answer"].strip()
+                        if CLAIMED_CHANGE.search(answer) and not side_effects:
+                            # The model claims it changed something it had no tool to change.
+                            tm.guard_actions.labels(cfg.name, "blocked_false_change_claim").inc()
+                            run_span.set_attribute("agent.guard", "blocked_false_change_claim")
+                            answer = REFUSAL
                         run_span.set_attribute("agent.outcome", "success")
-                        return self._finish(r, "success", t0, action["answer"].strip())
+                        return self._finish(r, "success", t0, answer)
 
                     name, args = str(action["action"]), action.get("args", {})
                     key = f"{name}:{json.dumps(args, sort_keys=True)}"

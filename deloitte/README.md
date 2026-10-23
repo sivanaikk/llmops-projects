@@ -46,7 +46,7 @@ flowchart LR
 
 ```bash
 cd deloitte
-make install && make test      # 50 Python tests + 10 Go tests, no model needed
+make install && make test      # 56 Python tests + 10 Go tests, no model needed
 make sentinel-demo             # drift/cost detectors on 5 synthetic scenarios
 
 make up                        # agent, Ollama (small models), Toxiproxy, Prometheus, Grafana, Jaeger, MLflow
@@ -69,16 +69,19 @@ make gate                      # error-budget decision for agent-runtime
 
 | Check | Result |
 |---|---|
-| Python tests: agent runtime (incl. HTTP service, real-client error classification), sentinel, evals (incl. MLflow tracker), resilience, repo consistency | 50 passed |
+| Python tests: agent runtime (incl. HTTP service, real-client error classification, safety guards), sentinel, evals (incl. MLflow tracker), resilience, repo consistency | 56 passed |
 | Go: `go vet`, `gofmt`, `go test` (gate policy, rules, fake Prometheus server) | 10 passed |
-| Generated SLO rules + agent alerts: `promtool check` and `promtool test` (5 scenarios, incl. "budget stops ticket but don't burn the SLO") | pass |
+| Generated SLO rules + agent alerts: `promtool check` and `promtool test` (6 scenarios, incl. "budget stops ticket but don't burn the SLO") | pass |
 | Helm: `helm lint` + kubeconform; Argo CD manifests against the Argo CD CRD schemas | valid |
 | Terraform (azurerm 4.x): `validate`, `fmt -check` | valid |
 | k6: `k6 inspect` for each scenario selection | parses |
 | gitleaks over the repo | no leaks |
 | ruff | clean |
 
+| **Real-model agent evals in GitHub Actions** (qwen2.5:1.5b vs 0.5b via Ollama on the runner) | runs on every `[run-evals]` push; history and lessons in [04-agent-evals](04-agent-evals/README.md#eval-history-real-runs-in-ci-qwen25-on-a-2-vcpu-github-runner-12-tasks--2-trials) |
+| Full CI workflow (python, go, validate, security: gitleaks + Trivy + SBOM) | green |
+
 Not run here: the Docker stack, and therefore the k6 load and the chaos
 experiments against real models (no Docker daemon in the build environment),
 `terraform plan` (no Azure subscription), and Trivy locally (its download wasn't
-reachable). CI covers Trivy, and the `agent-evals` job runs the real models.
+reachable); CI runs Trivy instead.

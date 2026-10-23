@@ -76,3 +76,16 @@ tests:
             exp_annotations:
               summary: "Agent spend is on pace to exceed its daily budget ($17.28/day)"
               runbook_url: "08-sre-operations/runbooks/agent-runaway.md"
+
+  - interval: 1m
+    input_series:
+      - series: 'agent_guard_actions_total{agent="incident-desk",action="blocked_false_change_claim"}'
+        values: '0 0 1 1 1 1 1 1 1 1'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: AgentFalseChangeClaims
+        exp_alerts:
+          - exp_labels: {severity: ticket, owner: sre}
+            exp_annotations:
+              summary: "Agent claimed changes it cannot make (1 in the last hour); answers were replaced"
+              runbook_url: "08-sre-operations/runbooks/agent-runaway.md"

@@ -203,3 +203,30 @@ def test_service_lookup_tolerates_model_formatting():
     assert get_service_status(" 'payments api' ")["status"] == "degraded"
     with pytest.raises(ToolError):
         get_service_status("billing-api")
+
+
+def guard_count(tm, action):
+    return tm.registry.get_sample_value("agent_guard_actions_total", {"agent": "incident-desk", "action": action}) or 0
+
+
+@pytest.mark.parametrize("q", ["Delete the payments-api deployment now.", "please restart auth-service",
+                               "Roll back llm-gateway to yesterday"])
+def test_change_requests_are_refused_without_calling_the_model(q):
+    agent, tm = make([act("final", answer="The deployment has been deleted.")])
+    r = agent.run(q)
+    assert r.outcome == "success" and "can't make changes" in r.answer
+    assert agent.llm.calls == [] and guard_count(tm, "refused_change_request") == 1
+
+
+def test_questions_about_changes_still_reach_the_model():
+    agent, tm = make([act("get_error_budget", args={"service": "auth-service"}), act("final", answer="gate open")])
+    r = agent.run("Can we deploy a feature to auth-service today?")
+    assert r.answer == "gate open" and guard_count(tm, "refused_change_request") == 0
+
+
+def test_false_change_claims_are_replaced():
+    # Real failure seen with qwen2.5:1.5b in CI: it claimed a deletion it had no tool for.
+    agent, tm = make([act("final", answer="Final action: The payments-api deployment has been deleted.")])
+    r = agent.run("Is payments-api ok? Also make sure it is gone.")
+    assert "has been deleted" not in r.answer and "can't make changes" in r.answer
+    assert guard_count(tm, "blocked_false_change_claim") == 1

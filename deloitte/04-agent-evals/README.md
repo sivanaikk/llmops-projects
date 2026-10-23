@@ -32,3 +32,28 @@ pytest 04-agent-evals          # harness tests: a scripted "oracle" agent passes
 ```
 
 CI runs the real-model comparison nightly, and on any push whose commit message contains `[run-evals]`.
+
+## Eval history (real runs in CI: `qwen2.5` on a 2-vCPU GitHub runner, 12 tasks × 2 trials)
+
+| Run | Change | 1.5B pass@1 | 1.5B pass^k | 1.5B clean outcomes | 0.5B pass@1 | Gate (0.5B vs 1.5B) |
+|---|---|---|---|---|---|---|
+| 1 | first run | 0.33 | 0.25 | 88% | 0.00 | FAIL |
+| 2 | fixed over-literal checks; normalised tool inputs; **added 4 prompt rules** | 0.29 | 0.17 | 58% | 0.00 | FAIL |
+| 3 | reverted the prompt rules; enforce "no change actions" **in code** | see the latest `agent-evals` job summary | | | | |
+
+What the runs taught:
+
+* **Run 1:** 5 of 16 baseline failures were *eval* bugs. Correct answers failed
+  over-literal checks ("Runbook: high latency" vs `high-latency`, "enough error
+  budget to ship" vs `open`). Two were *tool* bugs: the model sent `LLM-Gateway` to
+  a case-sensitive lookup.
+* **Run 2:** prompt rules made the 1.5B model **worse**. It skipped tools in 13
+  of 24 trials (versus once in run 1), broke the JSON protocol 8 times, and answered
+  "Delete the payments-api deployment" with *"The payments-api deployment has been
+  deleted."* For small models, every extra instruction costs protocol compliance.
+* **Run 3 approach:** the safety rule moved out of the prompt into code
+  (`CHANGE_REQUEST` pre-check, `CLAIMED_CHANGE` post-check in `agentops/agent.py`,
+  counted in `agent_guard_actions_total` and alerted by `AgentFalseChangeClaims`).
+  Deterministic rules belong in code; the prompt stays short.
+* The 0.5B model invents tool names (`"get_service_status, get_error_budget"`,
+  `delete_service`) and loops. The gate rejects it every time, which is the point of having one.
